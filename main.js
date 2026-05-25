@@ -225,7 +225,7 @@ async function mainDecrypter(CNTVH5PlayerModule) {
     for (let inFileNameIndex = 2; inFileNameIndex < process.argv.length - 1; inFileNameIndex++) {
         console.log(`demuxing segment ${inFileNameIndex - 1}...`);
         const rawH264FileName = path.join(tmpdir, `raw${inFileNameIndex}.264`),
-              rawAACFileName = path.join(tmpdir, `raw${inFileNameIndex}.aac`),
+              rawAACFileName = path.join(tmpdir, `raw${inFileNameIndex}.m4a`),
               decryptedRawH264FileName = path.join(tmpdir, `out${inFileNameIndex}.264`);
 
         if (ffmpegDemuxTasks.length == THREAD_NUMBER) {
@@ -244,7 +244,7 @@ async function mainDecrypter(CNTVH5PlayerModule) {
     for (let inFileNameIndex = 2; inFileNameIndex < process.argv.length - 1; inFileNameIndex++) {
         console.log(`decrypting segment ${inFileNameIndex - 1}...`);
         const rawH264FileName = path.join(tmpdir, `raw${inFileNameIndex}.264`),
-              rawAACFileName = path.join(tmpdir, `raw${inFileNameIndex}.aac`),
+              rawAACFileName = path.join(tmpdir, `raw${inFileNameIndex}.m4a`),
               decryptedRawH264FileName = path.join(tmpdir, `out${inFileNameIndex}.264`);
 
         const rawH264Buffer = await fsPromises.readFile(rawH264FileName);
@@ -282,13 +282,16 @@ async function mainDecrypter(CNTVH5PlayerModule) {
             while (currentNALIndex < nalus.length && nalus[currentNALIndex].nalUnitType === 25)
                 currentNALIndex++;
 
-            while (currentNALIndex < nalus.length && outFile.write(nalus[currentNALIndex++].dump()));
+            while (currentNALIndex < nalus.length)
+                if (!outFile.write(nalus[currentNALIndex++].dump())) {
+                    outFile.once("drain", writeNALUs)
+                    break;
+                }
 
             if (currentNALIndex >= nalus.length)
                 outFile.end();
         }
 
-        outFile.on("drain", writeNALUs);
         writeNALUs();
         await events.once(outFile, "finish");
     }
@@ -306,7 +309,7 @@ async function mainDecrypter(CNTVH5PlayerModule) {
         { flag: 'a' }
     );
     for (let inFileNameIndex = 2; inFileNameIndex < process.argv.length - 1; inFileNameIndex++)
-        concatAudioListFileList.push(`file ${path.join('.', `raw${inFileNameIndex}.aac`)}`);
+        concatAudioListFileList.push(`file ${path.join('.', `raw${inFileNameIndex}.m4a`)}`);
 
     await fsPromises.writeFile(
         concatAudioListFileName,
