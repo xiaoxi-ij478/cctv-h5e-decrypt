@@ -1,8 +1,8 @@
 "use strict";
 
-import * as jscrc from "@modules/js-crc";
+import * as jscrc from "js-crc";
 
-import * as util from "./util";
+import * as util from "@/util.js";
 
 export {
     MPEGTSPacketBase,
@@ -24,9 +24,6 @@ export {
 // these classes receive a bytearray as constructor argument
 
 abstract class MPEGTSPacketBase {
-    protected abstract realInit(data: number[]): void;
-    protected abstract realReset(): void;
-
     constructor();
     constructor(data: number[]);
 
@@ -34,8 +31,12 @@ abstract class MPEGTSPacketBase {
         if (typeof data === "undefined")
             return;
 
-        init(data);
+        this.init(data);
     }
+
+    protected abstract realInit(data: number[]): void;
+    protected abstract realReset(): void;
+    protected abstract realDump(): number[];
 
     protected init(data: number[]): void {
         data = data.slice();
@@ -50,6 +51,10 @@ abstract class MPEGTSPacketBase {
     reinit(data: number[]): void {
         this.reset();
         this.init(data);
+    }
+
+    dump(): number[] {
+        return this.realDump();
     }
 }
 
@@ -81,6 +86,15 @@ class MPEGTSPacketHeader extends MPEGTSPacketBase {
         this.isContinuePacket = this.hasAdaptionControl = this.hasPayload = false;
         this.continuityCount = this.transportPriority = this.pid = 0;
     }
+
+    protected realDump(): number[] {
+        return [
+            0x47,
+            Number(!this.isContinuePacket) << 6 | this.transportPriority << 5 | this.pid >> 8,
+            this.pid & 0xFF,
+            Number(this.hasAdaptionControl) << 5 | Number(this.hasPayload) << 4 | this.continuityCount
+        ];
+    }
 }
 
 class MPEGTSPacketAdaptionField extends MPEGTSPacketBase {
@@ -88,13 +102,20 @@ class MPEGTSPacketAdaptionField extends MPEGTSPacketBase {
     payload: number[] = [];
 
     protected realInit(data: number[]): void {
-        this.length = data.splice(0, 1);
+        this.length = data.splice(0, 1)[0];
         this.payload = data;
     }
 
     protected realReset(): void {
         this.length = 0;
-        this.payload.splice();
+        this.payload = [];
+    }
+
+    protected realDump(): number[] {
+        return [
+            this.length,
+            ...this.payload
+        ];
     }
 }
 
@@ -123,7 +144,15 @@ class MPEGTSPacket extends MPEGTSPacketBase {
     protected realReset(): void {
         this.header.reset();
         this.adaptionField.reset();
-        this.payload.splice();
+        this.payload = [];
+    }
+
+    protected realDump(): number[] {
+        return [
+            ...this.header.dump(),
+            ...this.adaptionField.dump(),
+            ...this.payload
+        ];
     }
 }
 
@@ -133,7 +162,7 @@ class MPEGTSPacket extends MPEGTSPacketBase {
 // if you're familiar with reset() and reinit(),
 // that's because I copied them from MPEGTSPacketBase :)
 abstract class MPEGTSPESPacketBase {
-    private currentCounter: number = 0;
+    protected currentCounter: number = 0;
     protected buffer: number[] = [];
     protected remainingLength: number = 0; // expected to be set by subclasses
     complete: boolean = false;
@@ -143,16 +172,17 @@ abstract class MPEGTSPESPacketBase {
     constructor(data: MPEGTSPacket);
 
     constructor(data?: MPEGTSPacket) {
-        if (typeof data === "undefined");
+        if (typeof data === "undefined")
             return;
 
-        init(data);
+        this.init(data);
     }
 
     protected abstract get requiredBytes(): number;
     protected abstract realInit(): void;
     protected abstract realReset(): void;
     protected abstract realUpdate(): boolean; // returns true when completed
+    protected abstract realDump(): number[];
 
     protected init(data: MPEGTSPacket): void {
         if (data.header.isContinuePacket)
@@ -174,7 +204,7 @@ abstract class MPEGTSPESPacketBase {
         this.realReset();
         this.currentCounter = this.pid = 0;
         this.complete = false;
-        this.buffer.splice();
+        this.buffer = [];
     }
 
     reinit(data: MPEGTSPacket): void {
@@ -183,12 +213,12 @@ abstract class MPEGTSPESPacketBase {
     }
 
     update(data: MPEGTSPacket): boolean {
-        if (complete)
+        if (this.complete)
             throw new Error("Can't update a complete packet");
 
-        if (!data.isContinuePacket) {
+        if (!data.header.isContinuePacket) {
             // we assume the user want to RESET this packet
-            reset();
+            this.reset();
             this.currentCounter = data.header.continuityCount;
             this.pid = data.header.pid;
 
@@ -201,22 +231,31 @@ abstract class MPEGTSPESPacketBase {
             if (!data.header.isContinuePacket)
                 throw new Error("update() expects a continue packet");
 
-            util.checkNumberEqual(data.header.continuityCount, this.currentCounter, "continuity count mismatch", truea);
+            util.checkNumberEqual(data.header.continuityCount, this.currentCounter, "continuity count mismatch", true);
         }
 
-        if (!data.header.hasPayload)
-            return;
+        if (data.header.hasPayload) {
+            this.buffer = this.buffer.concat(data.payload);
 
-        this.buffer = this.buffer.concat(data.payload);
-        if (!this.realUpdate())
-            this.complete = true;
+            if (!this.realUpdate())
+                this.complete = true;
+        }
 
         return this.complete;
+    }
+
+    dump(): number[] {
+        if (!this.complete)
+            throw new Error("can't dump incomplete packet");
+
+        return this.realDump();
     }
 }
 
 // PSI requires to remove the first byte and the length it indicates
 abstract class MPEGTSPSIPacketBase extends MPEGTSPESPacketBase {
+    protected additionalData: number[] = [];
+
     protected init(data: MPEGTSPacket): void {
         if (data.header.isContinuePacket)
             throw new Error("MPEGTSPSIPacketBase init() expects an initial packet");
@@ -224,23 +263,33 @@ abstract class MPEGTSPSIPacketBase extends MPEGTSPESPacketBase {
         this.currentCounter = data.header.continuityCount;
         this.pid = data.header.pid;
 
-        if (data.header.hasPayload)
+        if (data.header.hasPayload) {
+            this.additionalData = data.payload.slice(0, data.payload[0] + 1);
             this.buffer = data.payload.slice(data.payload[0] + 1);
+        }
 
         if (this.buffer.length < this.requiredBytes)
             throw new Error("payload length less than required " + this.requiredBytes + " bytes");
 
         this.realInit();
     }
+
+    dump(): number[] {
+        return [
+            this.additionalData.length,
+            ...this.additionalData,
+            ...super.dump()
+        ];
+    }
 }
 
 type MPEGTSPATPIDMapping = {
-    programNumber: number;
+    program: number;
     pid: number;
 }
 
 class MPEGTSPAT extends MPEGTSPSIPacketBase {
-    private crc32obj: jscrc.Model = jscrc.crc32.create();
+    private crc32obj: jscrc.Crc = jscrc.crc32.create();
     transportStreamID: number = 0;
     programPMTPIDMapping: MPEGTSPATPIDMapping[] = [];
 
@@ -250,9 +299,9 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
         util.checkNumberEqual(this.buffer[1] >> 6 & 0x1, 0, "zero not 0", true);
         util.checkNumberEqual(this.buffer[1] >> 5 & 0x3, 3, "reserved not 3", true);
 
-        // the remaining length also counts the header
+        // the remaining length also counts the header and CRC
         this.remainingLength = (this.buffer[1] & 0xF) << 8 | this.buffer[2];
-        this.remainingLength -= 5;
+        this.remainingLength -= 9;
 
         this.transportStreamID = this.buffer[3] << 8 | this.buffer[4];
 
@@ -274,7 +323,7 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
 
     protected realReset(): void {
         this.crc32obj = jscrc.crc32.create();
-        this.programPMTPIDMapping.splice();
+        this.programPMTPIDMapping = [];
     }
 
     protected realUpdate(): boolean {
@@ -282,7 +331,7 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
             util.checkNumberEqual(this.buffer[2] >> 5, 7, "reserved3 not 7", true);
 
             this.programPMTPIDMapping.push({
-                programNumber: this.buffer[0] << 8 | this.buffer[1],
+                program: this.buffer[0] << 8 | this.buffer[1],
                 pid: this.buffer[2] & 0x1F | this.buffer[3]
             });
             this.crc32obj.update(this.buffer.splice(0, 4));
@@ -296,17 +345,46 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
 
         return true;
     }
+
+    protected realDump(): number[] {
+        const sectionLength: number = 9 + 4 * this.programPMTPIDMapping.length;
+        const crc32obj: jscrc.Crc = jscrc.crc32.create();
+        let dataToCRC: number[] = [
+            0x00,
+            0xB0 | sectionLength >> 8,
+            sectionLength & 0xFF,
+            this.transportStreamID >> 8,
+            this.transportStreamID & 0xFF,
+            0xC1,
+            0x00,
+            0x00,
+            ...(this.programPMTPIDMapping.map(
+                e => [
+                    e.program >> 8,
+                    e.program & 0xFF,
+                    0xE0 | e.pid >> 8,
+                    e.pid & 0xFF
+                ]
+            ).flat())
+        ];
+
+        crc32obj.update(dataToCRC);
+        dataToCRC = dataToCRC.concat(crc32obj.array());
+        return dataToCRC;
+    }
 }
 
 type MPEGTSPMTStreamInfo = {
     streamType: number;
     pid: number;
+    descriptor: number[];
 };
 
 class MPEGTSPMT extends MPEGTSPSIPacketBase {
-    private crc32obj: jscrc.Model = jscrc.crc32.create();
+    private crc32obj: jscrc.Crc = jscrc.crc32.create();
     assocProgram: number = 0;
     pcrpid: number = 0;
+    descriptor: number[] = [];
     streams: MPEGTSPMTStreamInfo[] = [];
 
     protected realInit(): void {
@@ -315,7 +393,7 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
         util.checkNumberEqual(this.buffer[1] >> 6 & 0x1, 0, "zero not 0", true);
         util.checkNumberEqual(this.buffer[1] >> 5 & 0x3, 3, "reserved not 3", true);
 
-        // the remaining length also counts the header
+        // the remaining length also counts the header and CRC
         this.remainingLength = (this.buffer[1] & 0xF) << 8 | this.buffer[2];
         this.remainingLength -= 9;
 
@@ -332,8 +410,9 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
 
         util.checkNumberEqual(this.buffer[10] >> 4, 15, "reserved4 not 15", true);
 
-        const descriptionLength = (this.buffer[10] & 0xF) << 8 | this.buffer[11];
-        this.crc32obj.update(this.buffer.splice(0, 12 + descriptionLength));
+        const descriptorLength = (this.buffer[10] & 0xF) << 8 | this.buffer[11];
+        this.descriptor = this.buffer.slice(12, descriptorLength);
+        this.crc32obj.update(this.buffer.splice(0, 12 + descriptorLength));
 
         if (!this.realUpdate())
             this.complete = true;
@@ -346,13 +425,13 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
     protected realReset(): void {
         this.crc32obj = jscrc.crc32.create();
         this.assocProgram = this.pcrpid = 0;
-        this.streams.splice();
+        this.streams = [];
     }
 
     protected realUpdate(): boolean {
         for (; this.remainingLength !== 4 && this.buffer.length >= 5; this.remainingLength -= 4) {
-            let descriptionLength = (this.buffer[3] & 0xF) << 8 | this.buffer[4];
-            if (5 + descriptionLength > this.buffer.length)
+            let descriptorLength = (this.buffer[3] & 0xF) << 8 | this.buffer[4];
+            if (5 + descriptorLength > this.buffer.length)
                 break;
 
             util.checkNumberEqual(this.buffer[1] >> 5, 7, "reserved not 7", true);
@@ -360,9 +439,10 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
 
             this.streams.push({
                 streamType: this.buffer[0],
-                pid: (this.buffer[2] & 0x1F) << 8 | this.buffer[3]
+                pid: (this.buffer[2] & 0x1F) << 8 | this.buffer[3],
+                descriptor: this.buffer.slice(5, descriptorLength)
             });
-            this.crc32obj.update(this.buffer.splice(0, 5 + descriptionLength));
+            this.crc32obj.update(this.buffer.splice(0, 5 + descriptorLength));
         }
 
         if (this.remainingLength !== 4)
@@ -373,23 +453,57 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
 
         return true;
     }
+
+    protected realDump(): number[] {
+        const sectionLength: number = (
+            9 +
+            5 * this.streams.length +
+            this.streams.reduce((a, e) => a + e.descriptor.length, 0)
+        );
+        const crc32obj: jscrc.Crc = jscrc.crc32.create();
+        let dataToCRC: number[] = [
+            0x02,
+            0xB0 | sectionLength >> 8,
+            sectionLength & 0xFF,
+            this.assocProgram >> 8,
+            this.assocProgram & 0xFF,
+            0xC1,
+            0x00,
+            0x00,
+            0xE0 | this.pcrpid >> 8,
+            this.pcrpid & 0xFF,
+            0xF0 | this.descriptor.length >> 8,
+            this.descriptor.length & 0xFF,
+            ...this.descriptor,
+            ...(this.streams.map(
+                e => [
+                    e.streamType,
+                    0xE0 | e.pid >> 8,
+                    e.pid & 0xFF,
+                    0xF0 | e.descriptor.length >> 8,
+                    e.descriptor.length & 0xFF,
+                    ...e.descriptor
+                ]
+            ).flat())
+        ];
+
+        crc32obj.update(dataToCRC);
+        dataToCRC = dataToCRC.concat(crc32obj.array());
+        return dataToCRC;
+    }
 }
 
 class MPEGTSPES extends MPEGTSPESPacketBase {
     streamID: number = 0;
     // NOTE! pts and dts are 33-bit unsigned integers so they must be stored as BigInts
-    pts: BigInt = 0;
-    dts: BigInt = 0;
-    haspts: boolean = false;
-    hasdts: boolean = false;
+    pts: BigInt = 0n;
+    dts: BigInt = 0n;
+    hasPTS: boolean = false;
+    hasDTS: boolean = false;
     header: number[] = [];
     payload: number[] = [];
 
     protected realInit(): void {
-        super(data);
-        if (typeof data === "undefined")
-            return;
-
         if (this.buffer[0] || this.buffer[1] || this.buffer[2] !== 1)
             throw new Error("PES start code not 0x000001");
 
@@ -398,7 +512,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
         if (this.remainingLength)
             this.remainingLength = -1;
 
-        this.buffer.splice(0, 5);
+        this.header = this.buffer.splice(0, 5);
 
         // we only analyze deeper for video/audio streams
         if (this.streamID >> 5 === 6 || this.streamID >> 4 === 14) {
@@ -406,12 +520,12 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
 
             switch (this.buffer[1] >> 6) {
                 case 3:
-                    hasDTS = hasPTS = true;
+                    this.hasDTS = this.hasPTS = true;
                     break;
 
                 case 2:
                     console.warn("this PES has no DTS information");
-                    hasPTS = true;
+                    this.hasPTS = true;
                     break;
 
                 case 1:
@@ -422,7 +536,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
                     break;
             }
 
-            if (hasDTS) { // we can save time by getting pts and dts at one time
+            if (this.hasDTS) { // we can save time by getting pts and dts at one time
                 util.checkNumberEqual(this.buffer[8] >> 4, 3, "fixed 0b0011 not correct");
                 util.checkNumberEqual(this.buffer[8] & 1, 1, "fixed 0b1 not correct");
                 util.checkNumberEqual(this.buffer[10] & 1, 1, "fixed 0b1 not correct");
@@ -444,7 +558,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
                     (BigInt(this.buffer[16]) << 7n | BigInt(this.buffer[17]) >> 1n)
                 );
 
-            } else if (hasPTS) {
+            } else if (this.hasPTS) {
                 util.checkNumberEqual(this.buffer[3] >> 4, 2, "fixed 0b0010 not correct");
                 util.checkNumberEqual(this.buffer[3] & 1, 1, "fixed 0b1 not correct");
                 util.checkNumberEqual(this.buffer[5] & 1, 1, "fixed 0b1 not correct");
@@ -457,8 +571,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
                 );
             }
 
-
-            this.buffer.splice(0, 2 + this.buffer[2]);
+            this.header = this.header.concat(this.buffer.splice(0, 2 + this.buffer[2]));
         }
 
         if (!this.realUpdate())
@@ -471,52 +584,65 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
 
     protected realReset(): void {
         this.streamID = 0;
-        pts = dts = 0;
-        haspts = hasdts = false;
-        this.header.splice();
-        this.payload.splice();
+        this.pts = this.dts = 0n;
+        this.hasPTS = this.hasDTS = false;
+        this.header = [];
+        this.payload = [];
     }
 
     protected realUpdate(): boolean {
         if (this.remainingLength === -1) {
             this.payload = this.payload.concat(this.buffer);
-            this.buffer.splice();
+            this.buffer = [];
             return false;
         }
 
-        this.remainingLength -= this.buffer.length;
-        this.payload = this.payload.concat(this.buffer);
-        this.buffer.splice();
+        const sliceLength = Math.min(this.remainingLength, this.buffer.length);
+        this.remainingLength -= sliceLength;
+        this.payload = this.payload.concat(this.buffer.slice(0, sliceLength));
+        this.buffer = [];
         return !this.remainingLength;
      }
+    
+    protected realDump(): number[] {
+        return [
+            ...this.header,
+            ...this.payload
+        ];
+    }
 }
 
 type MPEGTSPESPacketWithIndex = {
     pes: MPEGTSPES;
-    index: number[];
+    indexes: number[];
+};
+
+type MPEGTSPMTProgramAssoc = {
+    pmt: MPEGTSPMT;
+    pid: number;
+    program: number;
 };
 
 // the super class representating a whole TS
 class MPEGTS {
     pat: MPEGTSPAT = new MPEGTSPAT;
-    pmts: MPEGTSPMT[] = [];
+    pmts: MPEGTSPMTProgramAssoc[] = [];
     packets: MPEGTSPacket[] = [];
 
     constructor();
     constructor(data: number[]);
 
     constructor(data?: number[]) {
-        data = data.slice();
         if (typeof data === "undefined")
             return;
 
-        this.update(data);
+        this.update(data.slice());
     }
 
     reset(): void {
         this.pat.reset();
-        this.pmts.splice();
-        this.packets.splice();
+        this.pmts = [];
+        this.packets = [];
     }
 
     update(data: number[]): void {
@@ -527,61 +653,68 @@ class MPEGTS {
             this.packets.push(new MPEGTSPacket(data.splice(0, 188)));
 
         let patUpdated = false;
-        for (let packet of this.packets) {
+        for (const packet of this.packets) {
             if (packet.header.pid)
                 continue;
 
             // we found one
             patUpdated = true;
-            pat.update(packet);
-            pmts.splice();
-
-            if (!patUpdated)
-                return;
-
-            this.pmts.splice();
+            this.pat.update(packet);
+            this.pmts = [];
+            break;
         }
 
         // update PMT only if PAT is updated
-        // we find PMT a second time in case it is BEFORE PAT
-        for (let packet of this.packets) {
-            if (packet.header.pid !== pat.programPMTPIDMapping[1])
-                continue;
+        if (!patUpdated)
+            return;
 
-            pmts.push(new MPEGTSPMT(packet));
-            break;
-        }
+        // we find PMT a second time in case it is BEFORE PAT
+        for (const packet of this.packets)
+            for (const { program, pid } of this.pat.programPMTPIDMapping) {
+                if (packet.header.pid !== pid)
+                    continue;
+
+                this.pmts.push({
+                    pmt: new MPEGTSPMT(packet),
+                    pid,
+                    program
+                });
+                break;
+            }
     }
 
     getPacketsByPID(pid: number): MPEGTSPESPacketWithIndex[] | MPEGTSPMT | MPEGTSPAT {
-        const ret: MPEGTSPES[] = [];
+        const ret: MPEGTSPESPacketWithIndex[] = [];
 
         // return special tables rather than lookup again
-        switch (pid) {
-            case 0:
-                return new MPEGTSPAT(packet);
+        if (!pid)
+            return this.pat;
 
-            case pat.programPMTPIDMapping[1]:
-                return new MPEGTSPMT(packet);
-        }
+        for (const { pmt, pid: pmtPID, program } of this.pmts)
+            if (pid === pmtPID)
+                return pmt;
 
-        for (let packetIndex in this.packets) {
+        for (const packetIndex in this.packets) {
             let packet = this.packets[packetIndex];
 
             if (packet.header.pid !== pid)
                 continue;
 
-            if (ret.at(-1).pes.complete)
+            if (ret.at(-1)?.pes.complete)
                 ret.push({
                     pes: new MPEGTSPES(packet),
-                    index: [packetIndex]
+                    indexes: [Number(packetIndex)]
                 });
             else {
-                ret.at(-1).pes.update(packet);
-                ret.at(-1).index.push(packetIndex);
+                ret.at(-1)?.pes.update(packet);
+                ret.at(-1)?.indexes.push(Number(packetIndex));
             }
         }
 
         return ret;
+    }
+
+    dump(): number[] {
+        return this.packets.map(e => e.dump()).flat();
     }
 }

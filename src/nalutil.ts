@@ -1,8 +1,8 @@
 "use strict";
 
-import * as util from "./util";
+import * as util from "@/util.js";
 
-export { NALUnit, splitNALU, joinNALU };
+export { NALU, splitNALU, joinNALU };
 
 const NAL_START_FIRST: number[] = [0x00, 0x00, 0x00, 0x01];
 const NAL_START_SECOND: number[] = [0x00, 0x00, 0x01];
@@ -34,7 +34,7 @@ function getNALUPos(buf: number[]): [number, number][] {
 
 function splitNALU(buf: number[]): NALU[] {
     return getNALUPos(buf).map(
-        ([start, length]) => NALU(buf.slice(start, start + length))
+        ([start, length]) => new NALU(buf.slice(start, start + length))
     );
 }
 
@@ -43,7 +43,7 @@ function joinNALU(nalus: NALU[]): number[] {
 }
 
 class NALU {
-    private start: [number, number, number] | [number, number];
+    private start: number[];
     private header: number;
     data: number[];
 
@@ -52,6 +52,9 @@ class NALU {
     nalUnitType: number;
 
     constructor(data: number[]) {
+        if (data.length <= 4)
+            throw new Error("data length <= 4");
+
         if (util.arrayEquals(data.slice(0, 4), NAL_START_FIRST)) {
             this.start = data.slice(0, 4);
             this.header = data[4];

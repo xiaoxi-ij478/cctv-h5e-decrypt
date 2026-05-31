@@ -1,199 +1,154 @@
 "use strict";
 
-import { CNTVModule } from "/cctv_worker_new";
-import * as nalutil from "./nalutil";
+// this is an exception as I do not want to rename this external module
+// to anything else, so just import it to local namespace
+import { CNTVModule, CNTVModuleType } from "@/external/cctv_worker_new.js";
+import * as nalutil from "@/nalutil.js";
 
-type CNTVjsdecFuncType = (
-    mediaTagIDAddr: number,
-    dataAndPageHostAddr: number,
-    dataLength: number,
-    pageHostLength: number
-) => number;
+export { Decrypter };
 
-// note: they may be inaccurate, because i'm just guessing them...
-declare let CNTVModule: {
-    HEAP8: Int8Array;
+class Decrypter {
+    // each of the Decrypter instance will have its own CNTVH5PlayerModule module object
+    private CNTVH5PlayerModule: CNTVModuleType = CNTVModule();
+    private shouldDecrypt: boolean = false;
+    sessionBegin: boolean = false;
 
-    _CNTV_InitPlayer(mediaTagIDAddr: number): number;
-    _CNTV_UnInitPlayer(mediaTagIDAddr: number): number;
-    _CNTV_UpdatePlayer(mediaTagIDAddr: number): number;
-    _CNTV_jsdecVOD0: CNTVjsdecFuncType;
-    _CNTV_jsdecVOD1: CNTVjsdecFuncType;
-    _CNTV_jsdecVOD2: CNTVjsdecFuncType;
-    _CNTV_jsdecVOD3: CNTVjsdecFuncType;
-    _CNTV_jsdecVOD4: CNTVjsdecFuncType;
-    _CNTV_jsdecVOD5: CNTVjsdecFuncType;
-    _CNTV_jsdecVOD6: CNTVjsdecFuncType;
-    _CNTV_jsdecVOD7: CNTVjsdecFuncType;
-    _CNTV_jsdecVOD8: CNTVjsdecFuncType;
+    private static readonly MemoryExtend: number = 2048;
+    private static readonly mediaTagID: string = "myPlayer_player";
+    private vmpTag: string = "";
 
-    _jsmalloc(size: number): number;
-    _jsfree(addr: number): void;
+    private __common(o: "InitPlayer" | "UnInitPlayer" | "UpdatePlayer"): number {
+        const memory = this.CNTVH5PlayerModule._jsmalloc(Decrypter.mediaTagID.length + Decrypter.MemoryExtend);
 
-    onRuntimeInitialized(): void;
-};
+        this.CNTVH5PlayerModule.HEAP8.fill(0, memory, memory + Decrypter.mediaTagID.length + Decrypter.MemoryExtend);
+        this.CNTVH5PlayerModule.HEAP8.set(Array.from(Decrypter.mediaTagID, e => e.charCodeAt(0)), memory);
 
-// media tag id cannot be determined after dts and whether it's first session is determined
-// so we switch to use prefix and suffix
-// full format is "myPlayer_player##<dts timestamp>##<seeked ? 1 : 0>
-// (though i was unable to produce 1 on seek)
-const mediaTagIDPrefix: string = "myPlayer_player##", mediaTagIDSuffix: string = "##";
-const MemoryExtend: number = 2048;
-let vmpTag: string = "";
-let shouldDecrypt: boolean = false;
-let sessionBegan: boolean = false;
-
-function __common(o: "InitPlayer" | "UnInitPlayer" | "UpdatePlayer"): number {
-    const memory = CNTVModule._jsmalloc(mediaTagID.length + MemoryExtend);
-
-    CNTVModule.HEAP8.fill(0, memory, memory + mediaTagID.length + MemoryExtend);
-    CNTVModule.HEAP8.set(Array.from(mediaTagID, e => e.charCodeAt(0)), memory);
-
-    let ret: number;
-    switch (o) {
-        case "InitPlayer":
-            ret = CNTVModule._CNTV_InitPlayer(memory);
-            break;
-        case "UnInitPlayer":
-            ret = CNTVModule._CNTV_UnInitPlayer(memory);
-            break;
-        case "UpdatePlayer":
-            vmpTag = CNTVModule._CNTV_UpdatePlayer(memory).toString(16);
-            vmpTag = ['0'.repeat(8 - vmpTag.length), vmpTag].join('');
-            ret = 0;
-            break;
-    }
-
-    CNTVModule._jsfree(memory);
-    return ret;
-}
-
-function InitPlayer(): number { return __common("InitPlayer"); }
-function UnInitPlayer(): number { return __common("UnInitPlayer"); }
-function UpdatePlayer(): number { return __common("UpdatePlayer"); }
-
-function beginDecryptSession(): void {
-    if (sessionBegan)
-        throw new Error("session already started");
-
-    InitPlayer();
-}
-
-function endDecryptSession(): void {
-    if (!sessionBegan)
-        throw new Error("session not started yet");
-
-    UnInitPlayer();
-}
-
-// warning: this function will modify `data` in-place
-function decryptNALU(data: nalutil.NALU): nalutil.NALU {
-    if (!sessionBegan)
-        throw new Error("session not started yet");
-
-    switch (data.nalUnitType) {
-        case 1:
-        case 5:
-        case 25:
-            break;
-
-        default:
-            return data;
-    }
-
-    UpdatePlayer();
-
-    const pageHost: string = "https://tv.cctv.com";
-    const addr: number = CNTVModule._jsmalloc(data.data.length + MemoryExtend);
-
-    // in fact, these can be replaced with simple _CNTV_jsdec<n> calls,
-    // but i just list the keys set by cctv for fun here
-    // to not saturate the screen with argument lists, i shortened them to a single letter
-    // for the details of the arguments see the type definition at the top of this file
-    const StaticCallModuleVod = {
-        H264NalSet: function (CNTVModule, a, b, c, d) {
-            return CNTVModule._CNTV_jsdecVOD7(a, b, c, d);
-        },
-        H265NalData: function (CNTVModule, a, b, c, d) {
-            return CNTVModule._CNTV_jsdecVOD6(a, b, c, d);
-        },
-        AVS1AudioKey: function (CNTVModule, a, b, c, d) {
-            return CNTVModule._CNTV_jsdecVOD5(a, b, c, d);
-        },
-        HEVC2AAC: function (CNTVModule, a, b, c, d) {
-            return CNTVModule._CNTV_jsdecVOD4(a, b, c, d);
-        },
-        HASHMap: function (CNTVModule, a, b, c, d) {
-            return CNTVModule._CNTV_jsdecVOD3(a, b, c, d);
-        },
-        BASE64Dec: function (CNTVModule, a, b, c, d) {
-            return CNTVModule._CNTV_jsdecVOD2(a, b, c, d);
-        },
-        MediaSession: function (CNTVModule, a, b, c, d) {
-            return CNTVModule._CNTV_jsdecVOD1(a, b, c, d);
-        },
-        Mp4fragment: function (CNTVModule, a, b, c, d) {
-            return CNTVModule._CNTV_jsdecVOD0(a, b, c, d);
-        },
-        MpegAudio: function (CNTVModule, a, b, c, d) {
-            return CNTVModule._CNTV_jsdecVOD8(a, b, c, d);
-        },
-        AACDemuxer: function (CNTVModule, a, b, c, d) {
-            return CNTVModule._jsdecVOD(b, c, d);
+        let ret: number;
+        switch (o) {
+            case "InitPlayer":
+                ret = this.CNTVH5PlayerModule._CNTV_InitPlayer(memory);
+                break;
+            case "UnInitPlayer":
+                ret = this.CNTVH5PlayerModule._CNTV_UnInitPlayer(memory);
+                break;
+            case "UpdatePlayer":
+                this.vmpTag = this.CNTVH5PlayerModule._CNTV_UpdatePlayer(memory).toString(16);
+                this.vmpTag = '0'.repeat(8 - this.vmpTag.length) + this.vmpTag;
+                ret = 0;
+                break;
         }
-    };
-    function StaticCallModuleVodAPI(CNTVModule, a, b, c, d, index): number {
-        return StaticCallModuleVod[index](CNTVModule, a, b, c, d);
+
+        this.CNTVH5PlayerModule._jsfree(memory);
+        return ret;
+    }
+    private InitPlayer(): number { return this.__common("InitPlayer"); }
+    private UnInitPlayer(): number { return this.__common("UnInitPlayer"); }
+    private UpdatePlayer(): number { return this.__common("UpdatePlayer"); }
+
+    beginDecryptSession(): void {
+        if (this.sessionBegin)
+            throw new Error("session already started");
+
+        this.InitPlayer();
     }
 
-    CNTVModule.HEAP8.set(data.data, addr);
-    CNTVModule.HEAP8.set(
-        Array.from(pageHost, e => e.charCodeAt(0)), addr + data.data.length
-    );
-    const addr2: number = CNTVModule._jsmalloc(mediaTagID.length);
-    CNTVModule.HEAP8.set(Array.from(mediaTagID, e => e.charCodeAt(0)), addr2);
+    endDecryptSession(): void {
+        if (!this.sessionBegin)
+            throw new Error("session not started yet");
 
-    // how is this function called:
-    // if (d && '' != d) for (var m in d) this[r(492)].includes(d[m]) &&
-    // this[r(497)](e, p, h, c, l, Object[r(533)](this.StaticCallModuleVod) [m]);
-    // f = this.StaticCallModuleVodAPI(e, p, h, c, l, Object[r(533)](this[r(510)]) [8])
-    // where:
-    // r(492) == StaticCallModuleVodMap == Array.from("0123456")
-    // r(497) == StaticCallModuleVodAPI
-    // r(533) == keys
-    // r(510) == StaticCallModuleVod
-    // d == vmpTag
-    // e == CNTVModule
-    // h == addr
-    // p == addr2
-    // c == data.data.length
-    // l == pageHost.length
-    for (const i in vmpTag)
-        if ("0123456".includes(vmpTag[i]))
-            StaticCallModuleVodAPI(
-                CNTVModule,
-                addr2,
-                addr,
-                data.data.length,
-                pageHost.length,
-                Object.keys(StaticCallModuleVod)[i]
-            );
+        this.UnInitPlayer();
+    }
 
-    const decryptedLength: number = StaticCallModuleVodAPI(
-        CNTVModule,
-        addr2,
-        addr,
-        data.data.length,
-        pageHost.length,
-        Object.keys(StaticCallModuleVod)[8]
-    );
-    data.data = Array.from(CNTVModule.HEAP8.slice(addr, addr + decryptedLength));
+    // warning: this function will modify `data` in-place
+    decryptNALU(data: nalutil.NALU, dts: BigInt): nalutil.NALU {
+        if (!this.sessionBegin)
+            throw new Error("session not started yet");
 
-    CNTVModule._jsfree(addr);
-    CNTVModule._jsfree(addr2);
+        switch (data.nalUnitType) {
+            case 1:
+            case 5:
+            case 25:
+                break;
 
-    if (data.nalUnitType === 25)
-        shouldDecrypt = data.data[0] === 1;
+            default:
+                return data;
+        }
 
-    return data;
+        this.UpdatePlayer();
+
+        // i just list the keys set by cctv for fun here
+        // const StaticCallModuleVod = {
+        //    H264NalSet:   (a, b, c, d) => this.CNTVH5PlayerModule._CNTV_jsdecVOD7(a, b, c, d),
+        //    H265NalData:  (a, b, c, d) => this.CNTVH5PlayerModule._CNTV_jsdecVOD6(a, b, c, d),
+        //    AVS1AudioKey: (a, b, c, d) => this.CNTVH5PlayerModule._CNTV_jsdecVOD5(a, b, c, d),
+        //    HEVC2AAC:     (a, b, c, d) => this.CNTVH5PlayerModule._CNTV_jsdecVOD4(a, b, c, d),
+        //    HASHMap:      (a, b, c, d) => this.CNTVH5PlayerModule._CNTV_jsdecVOD3(a, b, c, d),
+        //    BASE64Dec:    (a, b, c, d) => this.CNTVH5PlayerModule._CNTV_jsdecVOD2(a, b, c, d),
+        //    MediaSession: (a, b, c, d) => this.CNTVH5PlayerModule._CNTV_jsdecVOD1(a, b, c, d),
+        //    Mp4fragment:  (a, b, c, d) => this.CNTVH5PlayerModule._CNTV_jsdecVOD0(a, b, c, d),
+        //    MpegAudio:    (a, b, c, d) => this.CNTVH5PlayerModule._CNTV_jsdecVOD8(a, b, c, d),
+        //    AACDemuxer:   (a, b, c, d) => this.CNTVH5PlayerModule._jsdecVOD(b, c, d)
+        //};
+        // const StaticCallModuleVodAPI = (a, b, c, d, index) => StaticCallModuleVod[index](a, b, c, d);
+
+        // media tag id cannot be determined after dts and whether it's first session is determined
+        // so we switch to use prefix and suffix
+        // full format is "myPlayer_player##<dts timestamp>##<seeked ? 1 : 0>
+        // (though i was unable to produce 1 on seek)
+        const pageHost: string = "https://tv.cctv.com";
+        const mediaTagID: string = `${Decrypter.mediaTagID}##${dts}##0`;
+        const addr: number = this.CNTVH5PlayerModule._jsmalloc(data.data.length + Decrypter.MemoryExtend);
+        const addr2: number = this.CNTVH5PlayerModule._jsmalloc(mediaTagID.length);
+
+        this.CNTVH5PlayerModule.HEAP8.set(data.data, addr);
+        this.CNTVH5PlayerModule.HEAP8.set(
+            Array.from(pageHost, e => e.charCodeAt(0)), addr + data.data.length
+        );
+        this.CNTVH5PlayerModule.HEAP8.set(Array.from(mediaTagID, e => e.charCodeAt(0)), addr2);
+
+        // how is this function called:
+        // if (d && '' != d) for (var m in d) this[r(492)].includes(d[m]) &&
+        // this[r(497)](e, p, h, c, l, Object[r(533)](this.StaticCallModuleVod) [m]);
+        // f = this.StaticCallModuleVodAPI(e, p, h, c, l, Object[r(533)](this[r(510)]) [8])
+        // where:
+        // r(492) == StaticCallModuleVodMap == Array.from("0123456")
+        // r(497) == StaticCallModuleVodAPI
+        // r(533) == keys
+        // r(510) == StaticCallModuleVod
+        // d == vmpTag
+        // e == CNTVH5PlayerModule
+        // h == addr
+        // p == addr2
+        // c == data.data.length
+        // l == pageHost.length
+        // 
+        // in this version i simplified the CNTVH5PlayerModule argument
+        for (let i = 0; i < this.vmpTag.length; i++)
+            if ("0123456".includes(this.vmpTag[i]))
+                this.CNTVH5PlayerModule[`_CNTV_jsdecVOD${i}` as keyof CNTVModuleType](
+                    addr2,
+                    addr,
+                    data.data.length,
+                    pageHost.length
+                );
+
+        const decryptedLength: number = this.CNTVH5PlayerModule._CNTV_jsdecVOD8(
+            addr2,
+            addr,
+            data.data.length,
+            pageHost.length
+        );
+        if (data.data.length !== decryptedLength)
+            console.warn("decrypted length " + decryptedLength + " not equal to original length " + data.data.length);
+
+        data.data = Array.from(this.CNTVH5PlayerModule.HEAP8.slice(addr, addr + decryptedLength));
+
+        this.CNTVH5PlayerModule._jsfree(addr);
+        this.CNTVH5PlayerModule._jsfree(addr2);
+
+        if (data.nalUnitType === 25)
+            this.shouldDecrypt = data.data[0] === 1;
+
+        return data;
+    }
 }

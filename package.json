@@ -2,6 +2,7 @@
   "name": "cctv-h5e-decrypt",
   "version": "0.0.1",
   "description": "Decrypt CCTV h5e-encrypted videos",
+  "type": "module",
   "homepage": "https://github.com/xiaoxi-ij478/cctv-h5e-decrypt#readme",
   "bugs": {
     "url": "https://github.com/xiaoxi-ij478/cctv-h5e-decrypt/issues"
@@ -12,12 +13,16 @@
   },
   "license": "MIT",
   "author": "xiaoxi-ij478",
-  "type": "es2020",
   "main": "main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
     "js-crc": "^0.3.1"
+  },
+  "devDependencies": {
+    "@types/js-crc": "^0.2.3",
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.4"
   }
 }

@@ -4,11 +4,11 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as process from "node:process";
 
-import * as decrypt from "./decrypt";
-import * as mpegts from "./mpegts";
-import * as nalutil from "./nalutil";
+import * as decrypt from "@/decrypt.js";
+import * as mpegts from "@/mpegts.js";
+import * as nalutil from "@/nalutil.js";
 
-async function main(): void {
+function main(): void {
     if (process.argv.length < 3 || process.argv[2] == "--help") {
         console.error("usage: main.js in.ts out.ts");
         process.exit(1);
@@ -17,11 +17,12 @@ async function main(): void {
     // I finally settled down to use synchronous version of the filesystem API
     // because I don't want to deal with what the hell async/await
     // on just a command line program
-    const tsFile: mpegts.MPEGTS = new MPEGTS(Array.from(fs.readFileSync(procrss.argv[2])));
-    let videoStreamPID: number;
+    const tsFile: mpegts.MPEGTS = new mpegts.MPEGTS(Array.from(fs.readFileSync(process.argv[2])));
+    const decrypter: decrypt.Decrypter = new decrypt.Decrypter;
+    let videoStreamPID: number = -1;
     
     // assume there's just one PMT
-    for (let stream of tsFile.pmts[0]) {
+    for (const stream of tsFile.pmts[0].pmt.streams) {
         if (stream.streamType !== 0x1B)
             continue; // video stream
 
@@ -29,10 +30,23 @@ async function main(): void {
         break;
     }
 
-    beginDecryptSession();
-    for (let { pes, index } of tsFile.getPacketsByPID(videoStreamPID)) {
-        for (let nalu of splitNALU(pes.payload)) {
-            decryptNALU(nalu);
-        }
+    if (videoStreamPID === -1)
+        throw new Error("video stream not found");
+
+    decrypter.beginDecryptSession();
+    for (const { pes, indexes } of (tsFile.getPacketsByPID(videoStreamPID) as mpegts.MPEGTSPESPacketWithIndex[])) {
+        const nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload);
+
+        for (const nalu of nalus)
+            decrypter.decryptNALU(nalu, pes.dts);
+
+        const newNALU: number[] = nalutil.joinNALU(nalus);
+        for (const index of indexes)
+            tsFile.packets[index].payload = newNALU.splice(0, tsFile.packets[index].payload.length);
     }
+
+    decrypter.endDecryptSession();
+    fs.writeFileSync(process.argv[3], Uint8Array.from(tsFile.dump()));
 }
+
+main();

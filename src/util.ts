@@ -5,7 +5,7 @@ export { arrayEquals, checkNumberEqual, checkNumberNotEqual };
 function arrayEquals(a: number[], b: number[]): boolean {
     return (
         a.length === b.length &&
-        a.every((el, idx) => el === b.at(idx));
+        a.every((el, idx) => el === b.at(idx))
     );
 }
 
