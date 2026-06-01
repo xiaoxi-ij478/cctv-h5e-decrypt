@@ -2,8 +2,9 @@
 
 // this is an exception as I do not want to rename this external module
 // to anything else, so just import it to local namespace
-import { CNTVModule, CNTVModuleType } from "@/external/cctv_worker_new.js";
-import * as nalutil from "@/nalutil.js";
+import { CNTVModule, CNTVModuleType } from "./external/cctv_worker_new.js";
+import * as nalutil from "./nalutil.js";
+import * as util from "./util.js";
 
 export { Decrypter };
 
@@ -138,8 +139,12 @@ class Decrypter {
             data.data.length,
             pageHost.length
         );
-        if (data.data.length !== decryptedLength)
-            console.warn("decrypted length " + decryptedLength + " not equal to original length " + data.data.length);
+        util.checkNumberEqual(
+            data.data.length,
+            decryptedLength
+            "decrypted length " + decryptedLength + " not equal to original length " + data.data.length,
+            false
+        );
 
         data.data = Array.from(this.CNTVH5PlayerModule.HEAP8.slice(addr, addr + decryptedLength));
 
