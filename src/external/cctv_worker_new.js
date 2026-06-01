@@ -3,6 +3,7 @@ console.debug('CCTV_Woker_BTime', '2026-05-12 18:20:40');
 var CNTVModule = function() {
         var _scriptDir = "undefined" != typeof document && document.currentScript ? document.currentScript.src : void 0;
         return function(CNTVModule) {
+            var __DECRYPTER_URL = "https://tv.cctv.com";
             CNTVModule = CNTVModule || {};
             var Module = void 0 !== CNTVModule ? CNTVModule : {},
                 moduleOverrides = {},
@@ -242,7 +243,7 @@ var CNTVModule = function() {
             }
             var DYNAMIC_BASE = 5283424,
                 DYNAMICTOP_PTR = 40512,
-                INITIAL_TOTAL_MEMORY = Module.TOTAL_MEMORY || 16777216;
+                INITIAL_TOTAL_MEMORY = Module.TOTAL_MEMORY || 16777216<<2;
 
             function callRuntimeCallbacks(A) {
                 for (; 0 < A.length;) {
@@ -405,7 +406,7 @@ var CNTVModule = function() {
             var ASM_CONSTS = [function($0) {
                 function theAnswer(thearg) {
                     var name = UTF8ToString(thearg),
-                        a = name === 'self.location.href' ? "blob:https://tv.cctv.com/a2a31e32-7705-4db1-b190-1bd401598188" : name === 'self.location.host' ? "" : name === 'self.location.protocol' ? "blob:" : eval(name),
+                        a = name === 'self.location.href' ? `blob:${__DECRYPTER_URL}/a2a31e32-7705-4db1-b190-1bd401598188` : name === 'self.location.host' ? "" : name === 'self.location.protocol' ? "blob:" : eval(name),
                         b = lengthBytesUTF8(a) + 1,
                         c = _malloc(b);
                     return stringToUTF8(a, c, b), c
@@ -2434,7 +2435,9 @@ var CNTVModule = function() {
             var emval_free_list = [],
                 emval_handle_array = [{}, {
                     value: {
-                        href: "blob:https://tv.cctv.com/a2a31e32-7705-4db1-b190-1bd401598188"
+                        get href() {
+                            return `blob:${__DECRYPTER_URL}/a2a31e32-7705-4db1-b190-1bd401598188`;
+                        }
                     }
                 }, {
                     value: null
@@ -2705,6 +2708,7 @@ var CNTVModule = function() {
                 A = requireHandle(A), e = requireRegisteredType(e, "emval::as");
                 var r = [],
                     g = __emval_register(r);
+                A.href && (A = A.href);
                 return HEAP32[t >> 2] = g, e.toWireType(r, A)
             }
             var emval_symbols = {};
@@ -3470,6 +3474,7 @@ var CNTVModule = function() {
                     return Module.asm.Ia.apply(null, arguments)
                 },
                 calledRun;
+                Module.__DECRYPTER_SET_URL = function(url) { __DECRYPTER_URL = url; };
 
             function ExitStatus(A) {
                 this.name = "ExitStatus", this.message = "Program terminated with exit(" + A + ")", this.status = A

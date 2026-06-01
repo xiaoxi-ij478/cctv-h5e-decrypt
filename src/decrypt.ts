@@ -1,8 +1,7 @@
 "use strict";
 
-// this is an exception as I do not want to rename this external module
-// to anything else, so just import it to local namespace
-import { CNTVModule, CNTVModuleType } from "./external/cctv_worker_new.js";
+import * as cctvWorkerModule from "./external/cctv_worker_new.js";
+
 import * as nalutil from "./nalutil.js";
 import * as util from "./util.js";
 
@@ -10,16 +9,19 @@ export { Decrypter };
 
 class Decrypter {
     // each of the Decrypter instance will have its own CNTVH5PlayerModule module object
-    private CNTVH5PlayerModule: CNTVModuleType = CNTVModule();
+    private CNTVH5PlayerModule: cctvWorkerModule.CNTVModuleType = cctvWorkerModule.CNTVModule();
     private shouldDecrypt: boolean = false;
-    loadFinished: Promise;
+    private url: string;
+    private mediaTagID: string;
+    private vmpTag: string = "";
+    private static readonly MemoryExtend: number = 2048;
+
+    loadFinished: Promise<void>;
     sessionBegin: boolean = false;
 
-    private static readonly MemoryExtend: number = 2048;
-    private static readonly mediaTagID: string = "myPlayer_player";
-    private vmpTag: string = "";
-
-    constructor() {
+    constructor(url: string, mediaTagID: string) {
+        this.CNTVH5PlayerModule.__DECRYPTER_SET_URL(this.url = url);
+        this.mediaTagID = mediaTagID;
         this.loadFinished = new Promise(
             resolve => {
                 this.CNTVH5PlayerModule.onRuntimeInitialized = () => {
@@ -30,23 +32,29 @@ class Decrypter {
     }
 
     private __common(o: "InitPlayer" | "UnInitPlayer" | "UpdatePlayer"): number {
-        const memory = this.CNTVH5PlayerModule._jsmalloc(Decrypter.mediaTagID.length + Decrypter.MemoryExtend);
+        const memory: number = this.CNTVH5PlayerModule._jsmalloc(this.mediaTagID.length + Decrypter.MemoryExtend);
 
-        this.CNTVH5PlayerModule.HEAP8.fill(0, memory, memory + Decrypter.mediaTagID.length + Decrypter.MemoryExtend);
-        this.CNTVH5PlayerModule.HEAP8.set(Array.from(Decrypter.mediaTagID, e => e.charCodeAt(0)), memory);
+        this.CNTVH5PlayerModule.HEAP8.fill(0, memory, memory + this.mediaTagID.length + Decrypter.MemoryExtend);
+        this.CNTVH5PlayerModule.HEAP8.set(Array.from(this.mediaTagID, e => e.charCodeAt(0)), memory);
 
-        let ret: number;
+        let ret: number = 0;
         switch (o) {
             case "InitPlayer":
                 ret = this.CNTVH5PlayerModule._CNTV_InitPlayer(memory);
                 break;
+
             case "UnInitPlayer":
                 ret = this.CNTVH5PlayerModule._CNTV_UnInitPlayer(memory);
                 break;
+
             case "UpdatePlayer":
-                this.vmpTag = this.CNTVH5PlayerModule._CNTV_UpdatePlayer(memory).toString(16);
+                const _t: number = this.CNTVH5PlayerModule._CNTV_UpdatePlayer(memory);
+                if (!_t)
+                    break;
+
+                this.vmpTag = _t.toString(16);
                 this.vmpTag = '0'.repeat(8 - this.vmpTag.length) + this.vmpTag;
-                ret = 0;
+    
                 break;
         }
 
@@ -61,6 +69,7 @@ class Decrypter {
         if (this.sessionBegin)
             throw new Error("session already started");
 
+        this.sessionBegin = true;
         this.InitPlayer();
     }
 
@@ -68,6 +77,7 @@ class Decrypter {
         if (!this.sessionBegin)
             throw new Error("session not started yet");
 
+        this.sessionBegin = false;
         this.UnInitPlayer();
     }
 
@@ -79,10 +89,15 @@ class Decrypter {
         let useSpecialMediaTagID: boolean = true;
         switch (data.nalUnitType) {
             case 25:
+                this.shouldDecrypt = data.payload[0] === 1;
                 useSpecialMediaTagID = false;
+                break;
 
             case 1:
             case 5:
+                if (!this.shouldDecrypt)
+                    return data;
+
                 break;
 
             default:
@@ -110,16 +125,17 @@ class Decrypter {
         // so we switch to use prefix and suffix
         // full format is "myPlayer_player##<dts timestamp>##<seeked ? 1 : 0>
         // (though i was unable to produce 1 on seek)
-        const pageHost: string = "https://tv.cctv.com";
+        const pageHost: string = this.url;
         const mediaTagID: string =
-            useSpecialMediaTagID ? `${Decrypter.mediaTagID}##${dts}##0` : Decrypter.mediaTagID;
+            useSpecialMediaTagID ? `${this.mediaTagID}##${dts}##${Math.random()>0.5?1:0}` : this.mediaTagID;
 
-        const addr: number = this.CNTVH5PlayerModule._jsmalloc(data.data.length + Decrypter.MemoryExtend);
+        const addr: number = this.CNTVH5PlayerModule._jsmalloc(data.payload.byteLength + 1 + 1048576);
         const addr2: number = this.CNTVH5PlayerModule._jsmalloc(mediaTagID.length + 1);
-
-        this.CNTVH5PlayerModule.HEAP8.set(data.data, addr);
+console.log(dts);
+        this.CNTVH5PlayerModule.HEAP8[addr] = data.header;
+        this.CNTVH5PlayerModule.HEAP8.set(data.payload, addr + 1);
         this.CNTVH5PlayerModule.HEAP8.set(
-            Array.from(pageHost, e => e.charCodeAt(0)), addr + data.data.length
+            Array.from(pageHost, e => e.charCodeAt(0)), addr + data.payload.byteLength + 1
         );
         this.CNTVH5PlayerModule.HEAP8.set(Array.from(mediaTagID, e => e.charCodeAt(0)), addr2);
 
@@ -136,39 +152,32 @@ class Decrypter {
         // e == CNTVH5PlayerModule
         // h == addr
         // p == addr2
-        // c == data.data.length
+        // c == data.payload.byteLength
         // l == pageHost.length
         // 
         // in this version i simplified the CNTVH5PlayerModule argument
         for (let i = 0; i < this.vmpTag.length; i++)
             if ("0123456".includes(this.vmpTag[i]))
-                this.CNTVH5PlayerModule[`_CNTV_jsdecVOD${7 - i}` as keyof CNTVModuleType](
+                this.CNTVH5PlayerModule[
+                    `_CNTV_jsdecVOD${7 - i}` as keyof cctvWorkerModule.CNTVModuleType
+                ](
                     addr2,
                     addr,
-                    data.data.length,
+                    data.payload.byteLength + 1,
                     pageHost.length
                 );
 
         const decryptedLength: number = this.CNTVH5PlayerModule._CNTV_jsdecVOD8(
             addr2,
             addr,
-            data.data.length,
+            data.payload.byteLength + 1,
             pageHost.length
         );
-        util.checkNumberEqual(
-            data.data.length,
-            decryptedLength,
-            "decrypted length " + decryptedLength + " not equal to original length " + data.data.length,
-            false
-        );
 
-        data.data = Array.from(this.CNTVH5PlayerModule.HEAP8.slice(addr, addr + decryptedLength));
+        data.reloadData(Uint8Array.from(this.CNTVH5PlayerModule.HEAP8.slice(addr, addr + decryptedLength)));
 
         this.CNTVH5PlayerModule._jsfree(addr);
         this.CNTVH5PlayerModule._jsfree(addr2);
-
-        if (data.nalUnitType === 25)
-            this.shouldDecrypt = data.data[0] === 1;
 
         return data;
     }

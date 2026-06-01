@@ -13,6 +13,8 @@ type CNTVModuleType = {
 
     HEAP8: Int8Array;
 
+    __DECRYPTER_SET_URL(url: string): void;
+
     _CNTV_InitPlayer(mediaTagIDAddr: number): number;
     _CNTV_UnInitPlayer(mediaTagIDAddr: number): number;
     _CNTV_UpdatePlayer(mediaTagIDAddr: number): number;

@@ -8,7 +8,7 @@ export {
     concatUint8Arrays
 };
 
-function arrayEquals(a: number[], b: number[]): boolean {
+function arrayEquals(a: Uint8Array, b: Uint8Array): boolean {
     return (
         a.length === b.length &&
         a.every((el, idx) => el === b.at(idx))
@@ -61,7 +61,7 @@ function moveSliceUint8Array(arr: Uint8Array, start: number, length?: number): U
     );
 }
 
-function concatUint8Arrays(...arr: Uint8Array): Uint8Array {
+function concatUint8Arrays(...arr: Uint8Array[]): Uint8Array {
     const newArr: Uint8Array = new Uint8Array(
         new ArrayBuffer(
             arr.reduce((a, e) => a + e.byteLength, 0)

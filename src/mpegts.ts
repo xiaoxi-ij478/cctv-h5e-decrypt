@@ -103,7 +103,7 @@ class MPEGTSPacketAdaptionField extends MPEGTSPacketBase {
 
     protected init(data: Uint8Array): void {
         this.length = data[0];
-        this.payload = util.moveSliceUint8Array(data.buffer, 1);
+        this.payload = util.moveSliceUint8Array(data, 1, this.length);
     }
 
     reset(): void {
@@ -114,7 +114,7 @@ class MPEGTSPacketAdaptionField extends MPEGTSPacketBase {
     dump(): Uint8Array {
         return Uint8Array.of(
             this.length,
-            ...this.payload
+            ...(this.payload ?? []) 
         );
     }
 }
@@ -139,7 +139,7 @@ class MPEGTSPacket extends MPEGTSPacketBase {
     protected init(data: Uint8Array): void {
         if (data.length !== 188) {
             console.warn("this MPEG TS Packet has trailing garbage, will discard them");
-            data.splice(188);
+            data = util.moveSliceUint8Array(data, 0, 188);
         }
 
         this.header = new MPEGTSPacketHeader(util.moveSliceUint8Array(data, 0, 4));
@@ -176,7 +176,7 @@ class MPEGTSPacket extends MPEGTSPacketBase {
 // that's because I copied them from MPEGTSPacketBase :)
 abstract class MPEGTSPESPacketBase {
     protected currentCounter: number = 0;
-    protected buffer?: Uint8Array;
+    protected buffer: Uint8Array = new Uint8Array;
     protected remainingLength: number = 0; // expected to be set by subclasses
     initialized: boolean = false;
     complete: boolean = false;
@@ -192,25 +192,29 @@ abstract class MPEGTSPESPacketBase {
         if (data.header.isContinuePacket)
             throw new Error("MPEGTSPESPacketBase init() expects an initial packet");
 
-        this.initialized = true;
         this.currentCounter = data.header.continuityCount;
         this.pid = data.header.pid;
 
-        if (data.header.hasPayload) {
-            this.buffer = data.payload!;
+        if (!data.header.hasPayload)
+            return;
 
-            if (this.buffer.length < this.requiredBytes)
-                throw new Error("payload length less than required " + this.requiredBytes + " bytes");
-        }
+        this.initialized = true;
+        this.buffer = data.payload!;
+
+        if (this.buffer.length < this.requiredBytes)
+            throw new Error("payload length less than required " + this.requiredBytes + " bytes");
 
         this.realInit();
+
+        if (this.realUpdate())
+            this.complete = true;
     }
 
     reset(): void {
         this.realReset();
         this.currentCounter = this.pid = 0;
         this.complete = this.initialized = false;
-        this.buffer = undefined;
+        this.buffer = new Uint8Array;
     }
 
     reinit(data: MPEGTSPacket): void {
@@ -231,14 +235,20 @@ abstract class MPEGTSPESPacketBase {
         util.checkNumberEqual(data.header.pid, this.pid, "provided packet's pid do not match that of this pes", true);
         util.checkNumberEqual(data.header.continuityCount, this.currentCounter, "continuity count mismatch", true);
 
-        if (data.header.hasPayload) {
-            // the user may clean the buffer by setting this.buffer to undefined
-            // we need to support that
-            this.buffer = util.concatUint8Arrays(this.buffer ?? new Uint8Array(), data.payload!);
+        if (!data.header.hasPayload)
+            return false;
 
-            if (this.realUpdate())
-                this.complete = true;
+        if (!this.initialized) {
+            this.init(data);
+            return this.complete;
         }
+
+        // the user may clean the buffer by setting this.buffer to undefined
+        // we need to support that
+        this.buffer = util.concatUint8Arrays(this.buffer, data.payload!);
+
+        if (this.realUpdate())
+            this.complete = true;
 
         return this.complete;
     }
@@ -253,7 +263,7 @@ abstract class MPEGTSPESPacketBase {
 
 // PSI requires to remove the first byte and the length it indicates
 abstract class MPEGTSPSIPacketBase extends MPEGTSPESPacketBase {
-    protected additionalData?: Uint8Array;
+    protected additionalData: Uint8Array = new Uint8Array;
 
     protected init(data: MPEGTSPacket): void {
         if (data.header.isContinuePacket)
@@ -272,11 +282,14 @@ abstract class MPEGTSPSIPacketBase extends MPEGTSPESPacketBase {
             throw new Error("payload length less than required " + this.requiredBytes + " bytes");
 
         this.realInit();
+
+        if (this.realUpdate())
+            this.complete = true;
     }
 
     dump(): Uint8Array {
         return Uint8Array.of(
-            this.additionalData.length,
+            this.additionalData.byteLength,
             ...this.additionalData,
             ...super.dump()
         );
@@ -330,9 +343,6 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
 
         this.crc32obj.update(util.moveSliceUint8Array(this.buffer, 0, 8 /* total header length */));
         this.buffer = util.moveSliceUint8Array(this.buffer, 8);
-
-        if (this.realUpdate())
-            this.complete = true;
     }
 
     protected get requiredBytes(): number {
@@ -364,8 +374,8 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
 
         if (
             !util.arrayEquals(
-                this.crc32obj.array(),
-                Array.from(util.moveSliceUint8Array(this.buffer, 0, 4))
+                Uint8Array.from(this.crc32obj.array()),
+                util.moveSliceUint8Array(this.buffer, 0, 4)
             )
         )
             throw new Error("PAT CRC32 mismatch");
@@ -404,7 +414,7 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
         );
 
         crc32obj.update(dataToCRC);
-        dataToCRC = util.concatUint8Arrays(dataToCRC, crc32obj.array());
+        dataToCRC = util.concatUint8Arrays(dataToCRC, Uint8Array.from(crc32obj.array()));
         return dataToCRC;
     }
 }
@@ -419,7 +429,7 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
     private crc32obj: jsCrc.Crc = jsCrcModels.crc_32_mpeg_2.create();
     assocProgram: number = 0;
     pcrpid: number = 0;
-    descriptor?: Uint8Array;
+    descriptor: Uint8Array = new Uint8Array;
     streams: MPEGTSPMTStreamInfo[] = [];
 
     constructor();
@@ -467,9 +477,6 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
 
         this.crc32obj.update(util.moveSliceUint8Array(this.buffer, 0, 12 /* total header length */ + descriptorLength));
         this.buffer = util.moveSliceUint8Array(this.buffer, 12 + descriptorLength);
-
-        if (this.realUpdate())
-            this.complete = true;
     }
 
     protected get requiredBytes(): number {
@@ -479,7 +486,7 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
     protected realReset(): void {
         this.crc32obj = jsCrcModels.crc_32_mpeg_2.create();
         this.assocProgram = this.pcrpid = 0;
-        this.descriptor = undefined;
+        this.descriptor = new Uint8Array;
         this.streams = [];
     }
 
@@ -510,10 +517,12 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
 
         if (
             !util.arrayEquals(
-                this.crc32obj.array(),
-                Array.from(util.moveSliceUint8Array(this.buffer, 0, 4))
+                Uint8Array.from(this.crc32obj.array()),
+                util.moveSliceUint8Array(this.buffer, 0, 4)
             )
         )
+            throw new Error("PMT CRC32 mismatch");
+
         this.remainingLength = 0;
         return true;
     }
@@ -556,7 +565,7 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
         );
 
         crc32obj.update(dataToCRC);
-        dataToCRC = util.concatUint8Arrays(dataToCRC, crc32obj.array());
+        dataToCRC = util.concatUint8Arrays(dataToCRC, Uint8Array.from(crc32obj.array()));
         return dataToCRC;
     }
 }
@@ -568,8 +577,9 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
     dts: BigInt = 0n;
     hasPTS: boolean = false;
     hasDTS: boolean = false;
-    header?: Uint8Array;
-    payload?: Uint8Array;
+    header: Uint8Array = new Uint8Array;
+    payload: Uint8Array = new Uint8Array;
+    payloadStartOffset: number = 0;
 
     constructor();
     constructor(data: MPEGTSPacket);
@@ -607,7 +617,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
                     break;
 
                 case 2:
-                    console.warn("this PES has no DTS information");
+                    // console.warn("this PES has no DTS information");
                     this.hasPTS = true;
                     break;
 
@@ -615,7 +625,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
                     throw new Error("PTS DTS flags value 1 is forbidden");
 
                 case 0:
-                    console.warn("this PES has no PTS and DTS information");
+                    // console.warn("this PES has no PTS and DTS information");
                     break;
             }
 
@@ -654,15 +664,13 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
                 );
             }
 
+            this.payloadStartOffset = 6 + 3 + this.buffer[2];
             this.header = util.concatUint8Arrays(
                 this.header,
                 util.moveSliceUint8Array(this.buffer, 0, 3 + this.buffer[2])
             );
             this.buffer = util.moveSliceUint8Array(this.buffer, 3 + this.buffer[2])
         }
-
-        if (this.realUpdate())
-            this.complete = true;
     }
 
     protected get requiredBytes(): number {
@@ -673,24 +681,23 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
         this.streamID = 0;
         this.pts = this.dts = 0n;
         this.hasPTS = this.hasDTS = false;
-        this.header = undefined;
-        this.payload = undefined;
+        this.header = this.payload = new Uint8Array;
     }
 
     protected realUpdate(): boolean {
         if (this.remainingLength === -1) {
-            this.payload = util.concatUint8Arrays(this.payload ?? new Uint8Array, this.buffer);
-            this.buffer = undefined;
+            this.payload = util.concatUint8Arrays(this.payload, this.buffer);
+            this.buffer = new Uint8Array;
             return false;
         }
 
         const sliceLength = Math.min(this.remainingLength, this.buffer.length);
         this.remainingLength -= sliceLength;
         this.payload = util.concatUint8Arrays(
-            this.payload ?? new Uint8Array,
+            this.payload,
             util.moveSliceUint8Array(this.buffer, 0, sliceLength)
         );
-        this.buffer = undefined;
+        this.buffer = new Uint8Array;
         return !this.remainingLength;
      }
     
@@ -756,7 +763,7 @@ class MPEGTS {
             }
 
             if (patUpdated) {
-                console.warn("warning: multiple PAT found in one TS file; using the old one");
+                console.warn("multiple PAT found in one TS file; using the old one");
                 continue;
             }
 
@@ -790,6 +797,7 @@ class MPEGTS {
                         pid,
                         program
                     });
+    
                 break;
             }
     }
@@ -827,6 +835,6 @@ class MPEGTS {
     }
 
     dump(): Uint8Array {
-        return this.packets.reduce((a, e) => util.concatUint8Arrays(a, e), new Uint8Array);
+        return this.packets.reduce((a, e, i) => { console.log("dumping %d", i); return util.concatUint8Arrays(a, e.dump()); }, new Uint8Array);
     }
 }

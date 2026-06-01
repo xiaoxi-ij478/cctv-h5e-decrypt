@@ -4,11 +4,10 @@ import * as util from "./util.js";
 
 export { NALU, splitNALU, joinNALU };
 
-const NAL_START_FIRST: number[] = [0x00, 0x00, 0x00, 0x01];
-const NAL_START_SECOND: number[] = [0x00, 0x00, 0x01];
+const NAL_START_FIRST: Uint8Array = Uint8Array.of(0x00, 0x00, 0x00, 0x01);
+const NAL_START_SECOND: Uint8Array = Uint8Array.of(0x00, 0x00, 0x01);
 
 function getNALUPos(buf: Uint8Array): [number, number][] {
-    console.log(buf);
     let start: number, prev = 0, off = 0;
     const ret: [number, number][] = [];
 
@@ -44,27 +43,26 @@ function joinNALU(nalus: NALU[]): Uint8Array {
 }
 
 class NALU {
-    private start: number[];
-    private header: number;
-    data: Uint8Array;
+    start: Uint8Array;
+    header: number;
+    payload: Uint8Array;
 
     forbiddenZeroBit: number;
     nalRefIdc: number;
     nalUnitType: number;
 
     constructor(data: Uint8Array) {
-        console.log(data);
         if (data.length <= 4)
             throw new Error("data length <= 4");
 
         if (util.arrayEquals(util.moveSliceUint8Array(data, 0, 4), NAL_START_FIRST)) {
             this.start = util.moveSliceUint8Array(data, 0, 4);
             this.header = data[4];
-            this.data = util.moveSliceUint8Array(data, 5);
+            this.payload = util.moveSliceUint8Array(data, 5);
         } else if (util.arrayEquals(data.slice(0, 3), NAL_START_SECOND)) {
             this.start = util.moveSliceUint8Array(data, 0, 3);
             this.header = data[3];
-            this.data = util.moveSliceUint8Array(data, 4);
+            this.payload = util.moveSliceUint8Array(data, 4);
         } else
             throw new Error("NAL unit start mismatch");
 
@@ -75,7 +73,7 @@ class NALU {
 
     reloadData(newData: Uint8Array): void {
         this.header = newData[0];
-        this.data = util.moveSliceUint8Array(data, 1);
+        this.payload = util.moveSliceUint8Array(newData, 1);
 
         this.forbiddenZeroBit = this.header >> 7;
         this.nalRefIdc = this.header >> 5 & 0x3;
@@ -83,6 +81,6 @@ class NALU {
     }
 
     dump(): Uint8Array {
-        return Uint8Array.of(...this.start, this.header, ...this.data);
+        return Uint8Array.from([...this.start, this.header, ...this.payload]);
     }
 }

@@ -1,6 +1,7 @@
 "use strict";
 
 import * as mpegts from "../mpegts.js";
+import * as util from "../util.js";
 
 // generated with:
 // ffmpeg -f lavfi -i "color=size=1280x720:color=#000000" -f lavfi -i "anullsrc" -t 3 -c:v libx264 -c:a aac -f mpegts - | xxd -i
@@ -2455,6 +2456,11 @@ function testMain(): void {
     console.log(tsFile.getPacketsByPID(4096));
     console.log(tsFile.getPacketsByPID(256));
     console.log(tsFile.getPacketsByPID(257));
+    for (let i=0;i<tsFile.packets.length;i++){
+        console.assert(
+            util.arrayEquals(tsFile.packets[i].dump(), TEST_DATA_1.slice((i) * 188, (i+1)*188)),
+            "package %d not equal when dumped: %o", i, tsFile.packets[i]
+        );}
 }
 
 testMain();
