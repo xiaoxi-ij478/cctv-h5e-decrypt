@@ -126,7 +126,7 @@ class Decrypter {
         // in this version i simplified the CNTVH5PlayerModule argument
         for (let i = 0; i < this.vmpTag.length; i++)
             if ("0123456".includes(this.vmpTag[i]))
-                this.CNTVH5PlayerModule[`_CNTV_jsdecVOD${i}` as keyof CNTVModuleType](
+                this.CNTVH5PlayerModule[`_CNTV_jsdecVOD${7 - i}` as keyof CNTVModuleType](
                     addr2,
                     addr,
                     data.data.length,
