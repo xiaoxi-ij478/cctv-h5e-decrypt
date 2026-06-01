@@ -302,7 +302,10 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
 
         // the remaining length also counts the header and CRC
         this.remainingLength = (this.buffer[1] & 0xF) << 8 | this.buffer[2];
-        this.remainingLength -= 9;
+        if (this.remainingLength > 0x3FD)
+            throw new Error("section length greater than 1021");
+
+        this.remainingLength -= 5 /* header following section length */ + 4 /* crc */;
 
         this.transportStreamID = this.buffer[3] << 8 | this.buffer[4];
 
@@ -312,7 +315,7 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
         util.checkNumberEqual(this.buffer[6], 0, "section number not 0", true);
         util.checkNumberEqual(this.buffer[7], 0, "last section number not 0", true);
 
-        this.crc32obj.update(this.buffer.splice(0, 8));
+        this.crc32obj.update(this.buffer.splice(0, 8 /* total header length */));
 
         if (!this.realUpdate())
             this.complete = true;
@@ -348,7 +351,14 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
     }
 
     protected realDump(): number[] {
-        const sectionLength: number = 9 + 4 * this.programPMTPIDMapping.length;
+        const sectionLength: number = (
+            5 + // header following section length
+            4 + // crc
+            4 * this.programPMTPIDMapping.length // pmt pid mapping length
+        );
+        if (sectionLength > 0x3FD)
+            throw new Error("section length greater than 1021");
+
         const crc32obj: jscrc.Crc = jscrc.crc32.create();
         let dataToCRC: number[] = [
             0x00,
@@ -396,7 +406,8 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
 
         // the remaining length also counts the header and CRC
         this.remainingLength = (this.buffer[1] & 0xF) << 8 | this.buffer[2];
-        this.remainingLength -= 9;
+        if (this.remainingLength > 0x3FD)
+            throw new Error("section length greater than 1021");
 
         this.assocProgram = this.buffer[3] << 8 | this.buffer[4];
 
@@ -413,7 +424,10 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
 
         const descriptorLength = (this.buffer[10] & 0xF) << 8 | this.buffer[11];
         this.descriptor = this.buffer.slice(12, descriptorLength);
-        this.crc32obj.update(this.buffer.splice(0, 12 + descriptorLength));
+
+        this.remainingLength -= 9 /* header following section length */ + 4 /* crc */ + descriptorLength;
+
+        this.crc32obj.update(this.buffer.splice(0, 12 /* total header length */ + descriptorLength));
 
         if (!this.realUpdate())
             this.complete = true;
@@ -457,10 +471,14 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
 
     protected realDump(): number[] {
         const sectionLength: number = (
-            9 +
-            5 * this.streams.length +
-            this.streams.reduce((a, e) => a + e.descriptor.length, 0)
+            9 + // header following section length
+            4 + // crc
+            5 * this.streams.length + // streams basic length
+            this.streams.reduce((a, e) => a + e.descriptor.length, 0) // streams descriptor length
         );
+        if (sectionLength > 0x3FD)
+            throw new Error("section length greater than 1021");
+
         const crc32obj: jscrc.Crc = jscrc.crc32.create();
         let dataToCRC: number[] = [
             0x02,
