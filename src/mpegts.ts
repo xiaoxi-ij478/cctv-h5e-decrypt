@@ -2,7 +2,7 @@
 
 import * as jscrc from "js-crc";
 
-import * as util from "@/util.js";
+import * as util from "./util.js";
 
 export {
     MPEGTSPacketBase,
