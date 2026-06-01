@@ -81,6 +81,6 @@ class NALU {
     }
 
     dump(): number[] {
-        return [this.start, this.header, this.data].flat();
+        return [...this.start, this.header, ...this.data];
     }
 }
