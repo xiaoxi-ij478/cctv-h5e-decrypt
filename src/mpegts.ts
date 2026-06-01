@@ -17,6 +17,7 @@ export {
     MPEGTSPMT,
     MPEGTSPES,
     MPEGTSPESPacketWithIndex,
+    MPEGTSPMTProgramAssoc,
     MPEGTS
 };
 
