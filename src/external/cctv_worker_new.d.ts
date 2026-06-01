@@ -1,4 +1,4 @@
-export { CNTVjsdecFuncType, CNTVModule, CNTVModuleType}; 
+export { CNTVjsdecFuncType, CNTVModule, CNTVModuleType }; 
 
 type CNTVjsdecFuncType = (
     mediaTagIDAddr: number,
@@ -8,7 +8,7 @@ type CNTVjsdecFuncType = (
 ) => number;
 
 // note: they may be inaccurate, because i'm just guessing them...
-interface CNTVModuleType {
+type CNTVModuleType = {
     [key: `_CNTV_jsdecVOD${number}`]: any;
 
     HEAP8: Int8Array;
@@ -30,6 +30,6 @@ interface CNTVModuleType {
     _jsfree(addr: number): void;
 
     onRuntimeInitialized(): void;
-}
+};
 
 let CNTVModule: () => CNTVModuleType;
