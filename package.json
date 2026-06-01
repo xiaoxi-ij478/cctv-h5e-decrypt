@@ -13,7 +13,8 @@
   },
   "license": "MIT",
   "author": "xiaoxi-ij478",
-  "main": "main.js",
+  "main": "./src/main.ts",
+  "export": "./src/exports.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
