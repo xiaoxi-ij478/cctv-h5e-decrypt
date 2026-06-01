@@ -12,11 +12,22 @@ class Decrypter {
     // each of the Decrypter instance will have its own CNTVH5PlayerModule module object
     private CNTVH5PlayerModule: CNTVModuleType = CNTVModule();
     private shouldDecrypt: boolean = false;
+    loadFinished: Promise;
     sessionBegin: boolean = false;
 
     private static readonly MemoryExtend: number = 2048;
     private static readonly mediaTagID: string = "myPlayer_player";
     private vmpTag: string = "";
+
+    constructor() {
+        this.loadFinished = new Promise(
+            resolve => {
+                this.CNTVH5PlayerModule.onRuntimeInitialized = () => {
+                    resolve();
+                }
+            }
+        );
+    }
 
     private __common(o: "InitPlayer" | "UnInitPlayer" | "UpdatePlayer"): number {
         const memory = this.CNTVH5PlayerModule._jsmalloc(Decrypter.mediaTagID.length + Decrypter.MemoryExtend);
@@ -65,10 +76,13 @@ class Decrypter {
         if (!this.sessionBegin)
             throw new Error("session not started yet");
 
+        let useSpecialMediaTagID: boolean = true;
         switch (data.nalUnitType) {
+            case 25:
+                useSpecialMediaTagID = false;
+
             case 1:
             case 5:
-            case 25:
                 break;
 
             default:
@@ -97,9 +111,11 @@ class Decrypter {
         // full format is "myPlayer_player##<dts timestamp>##<seeked ? 1 : 0>
         // (though i was unable to produce 1 on seek)
         const pageHost: string = "https://tv.cctv.com";
-        const mediaTagID: string = `${Decrypter.mediaTagID}##${dts}##0`;
+        const mediaTagID: string =
+            useSpecialMediaTagID ? `${Decrypter.mediaTagID}##${dts}##0` : Decrypter.mediaTagID;
+
         const addr: number = this.CNTVH5PlayerModule._jsmalloc(data.data.length + Decrypter.MemoryExtend);
-        const addr2: number = this.CNTVH5PlayerModule._jsmalloc(mediaTagID.length);
+        const addr2: number = this.CNTVH5PlayerModule._jsmalloc(mediaTagID.length + 1);
 
         this.CNTVH5PlayerModule.HEAP8.set(data.data, addr);
         this.CNTVH5PlayerModule.HEAP8.set(
@@ -141,7 +157,7 @@ class Decrypter {
         );
         util.checkNumberEqual(
             data.data.length,
-            decryptedLength
+            decryptedLength,
             "decrypted length " + decryptedLength + " not equal to original length " + data.data.length,
             false
         );

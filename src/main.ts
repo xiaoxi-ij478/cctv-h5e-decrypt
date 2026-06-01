@@ -2,13 +2,14 @@
 
 import * as fs from "node:fs";
 import * as os from "node:os";
+import * as buffer from "node:buffer";
 import * as process from "node:process";
 
 import * as decrypt from "./decrypt.js";
 import * as mpegts from "./mpegts.js";
 import * as nalutil from "./nalutil.js";
 
-function main(): void {
+async function main(): void {
     if (process.argv.length < 3 || process.argv[2] == "--help") {
         console.error("usage: main.js in.ts out.ts");
         process.exit(1);
@@ -17,10 +18,12 @@ function main(): void {
     // I finally settled down to use synchronous version of the filesystem API
     // because I don't want to deal with what the hell async/await
     // on just a command line program
-    const tsFile: mpegts.MPEGTS = new mpegts.MPEGTS(Array.from(fs.readFileSync(process.argv[2])));
+    const tsBuffer: buffer.Buffer = fs.readFileSync(process.argv[2]);
+    const tsFile: mpegts.MPEGTS = new mpegts.MPEGTS(new Uint8Array(tsBuffer.buffer, tsBuffer.byteOffset, tsBuffer.length));
     const decrypter: decrypt.Decrypter = new decrypt.Decrypter;
     let videoStreamPID: number = -1;
     
+    await decrypter.loadFinished;
     // assume there's just one PMT
     for (const stream of tsFile.pmts[0].pmt.streams) {
         if (stream.streamType !== 0x1B)
@@ -38,13 +41,12 @@ function main(): void {
         const nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload);
 
         for (const nalu of nalus)
-            decrypter.decryptNALU(nalu, pes.dts);
+            decrypter.decryptNALU(nalu, pes.dts || pes.pts);
 
         const newNALU: number[] = nalutil.joinNALU(nalus);
         for (const index of indexes)
-            tsFile.packets[index].payload = newNALU.splice(0, tsFile.packets[index].payload.length);
+            tsFile.packets[index].payload = newNALU.splice(0, tsFile.packets[index].payload!.length);
     }
-
     decrypter.endDecryptSession();
     fs.writeFileSync(process.argv[3], Uint8Array.from(tsFile.dump()));
 }
