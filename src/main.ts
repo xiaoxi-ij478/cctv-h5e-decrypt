@@ -4,9 +4,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as process from "node:process";
 
-import * as decrypt from "@/decrypt.js";
-import * as mpegts from "@/mpegts.js";
-import * as nalutil from "@/nalutil.js";
+import * as decrypt from "./decrypt.js";
+import * as mpegts from "./mpegts.js";
+import * as nalutil from "./nalutil.js";
 
 function main(): void {
     if (process.argv.length < 3 || process.argv[2] == "--help") {
