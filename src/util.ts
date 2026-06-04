@@ -4,8 +4,8 @@ export {
     arrayEquals,
     checkNumberEqual,
     checkNumberNotEqual,
-    moveSliceUint8Array,
-    concatUint8Arrays
+    concatUint8Arrays,
+    concatUint8ArraysArr
 };
 
 function arrayEquals(a: Uint8Array, b: Uint8Array): boolean {
@@ -43,25 +43,19 @@ function checkNumberNotEqual(
     }
 }
 
-// like std::move()
-function moveSliceUint8Array(arr: Uint8Array, start: number, length?: number): Uint8Array {
-    if (length === undefined)
-        length = arr.byteLength - start;
-
-    if (start > arr.byteLength)
-        throw new Error("requested start point run past original array");
-
-    if (length + start > arr.byteLength)
-        throw new Error("requested length larger than original array");
-
-    return new Uint8Array(
-        arr.buffer,
-        arr.byteOffset + start,
-        length
+function concatUint8Arrays(...arr: Uint8Array[]): Uint8Array {
+    const newArr: Uint8Array = new Uint8Array(
+        new ArrayBuffer(
+            arr.reduce((a, e) => a + e.byteLength, 0)
+        )
     );
+    arr.reduce(
+        (a, e) => { newArr.set(e, a); return a + e.byteLength; }, 0
+    );
+    return newArr;
 }
 
-function concatUint8Arrays(...arr: Uint8Array[]): Uint8Array {
+function concatUint8ArraysArr(arr: Uint8Array[]): Uint8Array {
     const newArr: Uint8Array = new Uint8Array(
         new ArrayBuffer(
             arr.reduce((a, e) => a + e.byteLength, 0)

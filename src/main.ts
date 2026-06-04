@@ -10,7 +10,12 @@ import * as mpegts from "./mpegts.js";
 import * as nalutil from "./nalutil.js";
 import * as util from "./util.js";
 
+function waitForMsec(msec: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, msec));
+}
+
 async function main(): Promise<void> {
+    // we must inject location into the global namespace to make the script work
     if (process.argv.length < 3 || process.argv[2] == "--help") {
         console.error("usage: main.js in.ts out.ts");
         process.exit(1);
@@ -19,12 +24,12 @@ async function main(): Promise<void> {
     // I finally settled down to use synchronous version of the filesystem API
     // because I don't want to deal with what the hell async/await
     // on just a command line program
+    const decrypter: decrypt.Decrypter = new decrypt.Decrypter();
+    await decrypter.loadFinished
     const tsBuffer: buffer.Buffer = fs.readFileSync(process.argv[2]);
     const tsFile: mpegts.MPEGTS = new mpegts.MPEGTS(new Uint8Array(tsBuffer.buffer, tsBuffer.byteOffset, tsBuffer.length));
-    const decrypter: decrypt.Decrypter = new decrypt.Decrypter("https://www.cctv.com", "player_container_player");
     let videoStreamPID: number = -1;
     
-    await decrypter.loadFinished
     // assume there's just one PMT
     for (const stream of tsFile.pmts[0].pmt.streams) {
         if (stream.streamType !== 0x1B)
@@ -37,13 +42,13 @@ async function main(): Promise<void> {
     if (videoStreamPID === -1)
         throw new Error("video stream not found");
 
-        decrypter.beginDecryptSession();
     for (const { pes, indexes } of (tsFile.getPacketsByPID(videoStreamPID) as mpegts.MPEGTSPESPacketWithIndex[])) {
+        decrypter.beginDecryptSession();
         const nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload!);
 
         for (const nalu of nalus){
-            try{decrypter.decryptNALU(nalu, pes.dts || pes.pts);}
-            catch(e){console.log(nalu,e);process.exit(1);}
+            try{decrypter.decryptNALU(nalu);}
+            catch(e){console.log(nalus.at(-1),pes,e);process.exit(1);}
         }
 
         let newNALU: Uint8Array = nalutil.joinNALU(nalus);
@@ -72,13 +77,13 @@ async function main(): Promise<void> {
             }
 
             tsPacket.payload = util.concatUint8Arrays(
-                util.moveSliceUint8Array(tsPacket.payload, 0, offset),
-                util.moveSliceUint8Array(newNALU, 0, bytesToCopy - offset)
+                tsPacket.payload.subarray(0, offset),
+                newNALU.subarray(0, bytesToCopy - offset)
             );
-            newNALU = util.moveSliceUint8Array(newNALU, bytesToCopy - offset);
+            newNALU = newNALU.subarray(bytesToCopy - offset);
         }
-    }
         decrypter.endDecryptSession();
+    }
 
     fs.writeFileSync(process.argv[3], tsFile.dump());
 }

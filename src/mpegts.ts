@@ -21,6 +21,8 @@ export {
     MPEGTS
 };
 
+let disableIntegrityCheck: boolean = false;
+
 // TS layer packet
 // these classes receive a bytearray as constructor argument
 abstract class MPEGTSPacketBase {
@@ -55,14 +57,17 @@ class MPEGTSPacketHeader extends MPEGTSPacketBase {
     }
 
     protected init(data: Uint8Array): void {
-        util.checkNumberEqual(data[0], 0x47, "sync byte error", true);
-        util.checkNumberNotEqual(data[1] >> 7, 1, "error indicator set", true);
+        if (!disableIntegrityCheck) {
+            util.checkNumberEqual(data[0], 0x47, "sync byte error", true);
+            util.checkNumberNotEqual(data[1] >> 7, 1, "error indicator set", true);
+        }
 
         this.isContinuePacket = !(data[1] >> 6 & 0x1);
         this.transportPriority = data[1] >> 5 & 0x1;
         this.pid = (data[1] & 0x1F) << 8 | data[2];
 
-        util.checkNumberNotEqual(data[3] >> 4 & 0x3, 0, "adaption field control field === 0");
+        if (!disableIntegrityCheck)
+            util.checkNumberNotEqual(data[3] >> 4 & 0x3, 0, "adaption field control field === 0");
 
         this.hasAdaptionControl = Boolean(data[3] >> 5 & 0x1);
         this.hasPayload = Boolean(data[3] >> 4 & 0x1);
@@ -103,7 +108,7 @@ class MPEGTSPacketAdaptionField extends MPEGTSPacketBase {
 
     protected init(data: Uint8Array): void {
         this.length = data[0];
-        this.payload = util.moveSliceUint8Array(data, 1, this.length);
+        this.payload = data.subarray(1, this.length + 1);
     }
 
     reset(): void {
@@ -139,15 +144,15 @@ class MPEGTSPacket extends MPEGTSPacketBase {
     protected init(data: Uint8Array): void {
         if (data.length !== 188) {
             console.warn("this MPEG TS Packet has trailing garbage, will discard them");
-            data = util.moveSliceUint8Array(data, 0, 188);
+            data = data.subarray(0, 188);
         }
 
-        this.header = new MPEGTSPacketHeader(util.moveSliceUint8Array(data, 0, 4));
-        data = util.moveSliceUint8Array(data, 4);
+        this.header = new MPEGTSPacketHeader(data.subarray(0, 4));
+        data = data.subarray(4);
 
         if (this.header.hasAdaptionControl) {
             this.adaptionField = new MPEGTSPacketAdaptionField(data);
-            data = util.moveSliceUint8Array(data, this.adaptionField.length + 1);
+            data = data.subarray(this.adaptionField.length + 1);
         }
 
         if (this.header.hasPayload)
@@ -189,8 +194,9 @@ abstract class MPEGTSPESPacketBase {
     protected abstract realDump(): Uint8Array;
 
     protected init(data: MPEGTSPacket): void {
-        if (data.header.isContinuePacket)
-            throw new Error("MPEGTSPESPacketBase init() expects an initial packet");
+        if (!disableIntegrityCheck)
+            if (data.header.isContinuePacket)
+                throw new Error("MPEGTSPESPacketBase init() expects an initial packet");
 
         this.currentCounter = data.header.continuityCount;
         this.pid = data.header.pid;
@@ -201,8 +207,9 @@ abstract class MPEGTSPESPacketBase {
         this.initialized = true;
         this.buffer = data.payload!;
 
-        if (this.buffer.length < this.requiredBytes)
-            throw new Error("payload length less than required " + this.requiredBytes + " bytes");
+        if (!disableIntegrityCheck)
+            if (this.buffer.length < this.requiredBytes)
+                throw new Error("payload length less than required " + this.requiredBytes + " bytes");
 
         this.realInit();
 
@@ -274,8 +281,8 @@ abstract class MPEGTSPSIPacketBase extends MPEGTSPESPacketBase {
         this.pid = data.header.pid;
 
         if (data.header.hasPayload) {
-            this.additionalData = util.moveSliceUint8Array(data.payload!, 0, data.payload![0]);
-            this.buffer = util.moveSliceUint8Array(data.payload!, data.payload![0] + 1);
+            this.additionalData = data.payload!.subarray(0, data.payload![0]);
+            this.buffer = data.payload!.subarray(data.payload![0] + 1);
         }
 
         if (this.buffer.length < this.requiredBytes)
@@ -341,8 +348,8 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
         util.checkNumberEqual(this.buffer[6], 0, "section number not 0", true);
         util.checkNumberEqual(this.buffer[7], 0, "last section number not 0", true);
 
-        this.crc32obj.update(util.moveSliceUint8Array(this.buffer, 0, 8 /* total header length */));
-        this.buffer = util.moveSliceUint8Array(this.buffer, 8);
+        this.crc32obj.update(this.buffer.subarray(0, 8 /* total header length */));
+        this.buffer = this.buffer.subarray(8);
     }
 
     protected get requiredBytes(): number {
@@ -362,8 +369,8 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
                 program: this.buffer[0] << 8 | this.buffer[1],
                 pid: (this.buffer[2] & 0x1F) << 8 | this.buffer[3]
             });
-            this.crc32obj.update(util.moveSliceUint8Array(this.buffer, 0, 4));
-            this.buffer = util.moveSliceUint8Array(this.buffer, 4);
+            this.crc32obj.update(this.buffer.subarray(0, 4));
+            this.buffer = this.buffer.subarray(4);
         }
 
         if (this.remainingLength < 4)
@@ -375,7 +382,7 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
         if (
             !util.arrayEquals(
                 Uint8Array.from(this.crc32obj.array()),
-                util.moveSliceUint8Array(this.buffer, 0, 4)
+                this.buffer.subarray(0, 4)
             )
         )
             throw new Error("PAT CRC32 mismatch");
@@ -470,13 +477,13 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
         util.checkNumberEqual(this.buffer[10] >> 4, 15, "reserved4 not 15", true);
 
         const descriptorLength = (this.buffer[10] & 0xF) << 8 | this.buffer[11];
-        this.descriptor = util.moveSliceUint8Array(this.buffer, 12, descriptorLength);
+        this.descriptor = this.buffer.subarray(12, descriptorLength + 12);
 
         // the remaining length also counts the header and CRC
         this.remainingLength -= 9 /* header following section length */ + descriptorLength;
 
-        this.crc32obj.update(util.moveSliceUint8Array(this.buffer, 0, 12 /* total header length */ + descriptorLength));
-        this.buffer = util.moveSliceUint8Array(this.buffer, 12 + descriptorLength);
+        this.crc32obj.update(this.buffer.subarray(0, 12 /* total header length */ + descriptorLength));
+        this.buffer = this.buffer.subarray(12 + descriptorLength);
     }
 
     protected get requiredBytes(): number {
@@ -502,10 +509,10 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
             this.streams.push({
                 streamType: this.buffer[0],
                 pid: (this.buffer[1] & 0x1F) << 8 | this.buffer[2],
-                descriptor: util.moveSliceUint8Array(this.buffer, 5, descriptorLength)
+                descriptor: this.buffer.subarray(5, descriptorLength)
             });
-            this.crc32obj.update(util.moveSliceUint8Array(this.buffer, 0, 5 + descriptorLength));
-            this.buffer = util.moveSliceUint8Array(this.buffer, 5 + descriptorLength);
+            this.crc32obj.update(this.buffer.subarray(0, 5 + descriptorLength));
+            this.buffer = this.buffer.subarray(5 + descriptorLength);
             this.remainingLength -= 5 + descriptorLength;
         }
 
@@ -518,7 +525,7 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
         if (
             !util.arrayEquals(
                 Uint8Array.from(this.crc32obj.array()),
-                util.moveSliceUint8Array(this.buffer, 0, 4)
+                this.buffer.subarray(0, 4)
             )
         )
             throw new Error("PMT CRC32 mismatch");
@@ -604,8 +611,8 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
         if (!this.remainingLength)
             this.remainingLength = -1;
 
-        this.header = util.moveSliceUint8Array(this.buffer, 0, 6);
-        this.buffer = util.moveSliceUint8Array(this.buffer, 6);
+        this.header = this.buffer.subarray(0, 6);
+        this.buffer = this.buffer.subarray(6);
 
         // we only analyze deeper for video/audio streams
         if (this.streamID >> 5 === 6 || this.streamID >> 4 === 14) {
@@ -629,7 +636,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
                     break;
             }
 
-            if (this.hasDTS) { // we can save time by getting pts and dts at one time
+            if (this.hasDTS) {
                 util.checkNumberEqual(this.buffer[3] >> 4, 3, "fixed 0b0011 not correct");
                 util.checkNumberEqual(this.buffer[3] & 1, 1, "fixed 0b1 not correct");
                 util.checkNumberEqual(this.buffer[5] & 1, 1, "fixed 0b1 not correct");
@@ -637,7 +644,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
                 util.checkNumberEqual(this.buffer[8] >> 4, 1, "fixed 0b0001 not correct");
                 util.checkNumberEqual(this.buffer[8] & 1, 1, "fixed 0b1 not correct");
                 util.checkNumberEqual(this.buffer[10] & 1, 1, "fixed 0b1 not correct");
-                util.checkNumberEqual(this.buffer[12] & 1, 1, "fixed 0b1 not correct");
+                util.checkNumberEqual(this.buffer[12] & 1,   1, "fixed 0b1 not correct");
 
                 this.pts = (
                     (BigInt(this.buffer[3]) >> 1n & 0x7n) << 30n |
@@ -667,9 +674,9 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
             this.payloadStartOffset = 6 + 3 + this.buffer[2];
             this.header = util.concatUint8Arrays(
                 this.header,
-                util.moveSliceUint8Array(this.buffer, 0, 3 + this.buffer[2])
+                this.buffer.subarray(0, 3 + this.buffer[2])
             );
-            this.buffer = util.moveSliceUint8Array(this.buffer, 3 + this.buffer[2])
+            this.buffer = this.buffer.subarray(3 + this.buffer[2])
         }
     }
 
@@ -695,7 +702,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
         this.remainingLength -= sliceLength;
         this.payload = util.concatUint8Arrays(
             this.payload,
-            util.moveSliceUint8Array(this.buffer, 0, sliceLength)
+            this.buffer.subarray(0, sliceLength)
         );
         this.buffer = new Uint8Array;
         return !this.remainingLength;
@@ -744,8 +751,8 @@ class MPEGTS {
 
     update(data: Uint8Array): void {  
         while (data.byteLength) {
-            this.packets.push(new MPEGTSPacket(util.moveSliceUint8Array(data, 0, 188)));
-            data = util.moveSliceUint8Array(data, 188);
+            this.packets.push(new MPEGTSPacket(data.subarray(0, 188)));
+            data = data.subarray(188);
         }
 
         // first find if there's PAT
@@ -835,6 +842,6 @@ class MPEGTS {
     }
 
     dump(): Uint8Array {
-        return this.packets.reduce((a, e, i) => { console.log("dumping %d", i); return util.concatUint8Arrays(a, e.dump()); }, new Uint8Array);
+        return util.concatUint8ArraysArr(this.packets.map((e, i) => e.dump()));
     }
 }

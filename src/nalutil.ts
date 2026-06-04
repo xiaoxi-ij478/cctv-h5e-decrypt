@@ -34,12 +34,12 @@ function getNALUPos(buf: Uint8Array): [number, number][] {
 
 function splitNALU(buf: Uint8Array): NALU[] {
     return getNALUPos(buf).map(
-        ([start, end]) => new NALU(util.moveSliceUint8Array(buf, start, end - start))
+        ([start, end]) => new NALU(buf.subarray(start, end))
     );
 }
 
 function joinNALU(nalus: NALU[]): Uint8Array {
-    return nalus.reduce((a, e) => util.concatUint8Arrays(a, e.dump()), new Uint8Array);
+    return util.concatUint8ArraysArr(nalus.map((e, i) => e.dump()));
 }
 
 class NALU {
@@ -55,14 +55,14 @@ class NALU {
         if (data.length <= 4)
             throw new Error("data length <= 4");
 
-        if (util.arrayEquals(util.moveSliceUint8Array(data, 0, 4), NAL_START_FIRST)) {
-            this.start = util.moveSliceUint8Array(data, 0, 4);
+        if (util.arrayEquals(data.subarray(0, 4), NAL_START_FIRST)) {
+            this.start = data.subarray(0, 4);
             this.header = data[4];
-            this.payload = util.moveSliceUint8Array(data, 5);
-        } else if (util.arrayEquals(data.slice(0, 3), NAL_START_SECOND)) {
-            this.start = util.moveSliceUint8Array(data, 0, 3);
+            this.payload = data.subarray(5);
+        } else if (util.arrayEquals(data.subarray(0, 3), NAL_START_SECOND)) {
+            this.start = data.subarray(0, 3);
             this.header = data[3];
-            this.payload = util.moveSliceUint8Array(data, 4);
+            this.payload = data.subarray(4);
         } else
             throw new Error("NAL unit start mismatch");
 
@@ -72,8 +72,10 @@ class NALU {
     }
 
     reloadData(newData: Uint8Array): void {
+        if (this.header !== newData[0])
+            throw new Error("header changed");
         this.header = newData[0];
-        this.payload = util.moveSliceUint8Array(newData, 1);
+        this.payload = newData.subarray(1);
 
         this.forbiddenZeroBit = this.header >> 7;
         this.nalRefIdc = this.header >> 5 & 0x3;
