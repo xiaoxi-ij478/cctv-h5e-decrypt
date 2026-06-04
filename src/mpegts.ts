@@ -50,7 +50,7 @@ class MPEGTSPacketHeader extends MPEGTSPacketBase {
     constructor(data?: Uint8Array) {
         super();
 
-        if (typeof data === "undefined") 
+        if (typeof data === "undefined")
             return;
 
         this.init(data);
@@ -119,7 +119,7 @@ class MPEGTSPacketAdaptionField extends MPEGTSPacketBase {
     dump(): Uint8Array {
         return Uint8Array.of(
             this.length,
-            ...(this.payload ?? []) 
+            ...(this.payload ?? [])
         );
     }
 }
@@ -707,7 +707,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
         this.buffer = new Uint8Array;
         return !this.remainingLength;
      }
-    
+
     protected realDump(): Uint8Array {
         return Uint8Array.of(
             ...this.header,
@@ -749,7 +749,7 @@ class MPEGTS {
         this.packets = [];
     }
 
-    update(data: Uint8Array): void {  
+    update(data: Uint8Array): void {
         while (data.byteLength) {
             this.packets.push(new MPEGTSPacket(data.subarray(0, 188)));
             data = data.subarray(188);
@@ -804,7 +804,7 @@ class MPEGTS {
                         pid,
                         program
                     });
-    
+
                 break;
             }
     }

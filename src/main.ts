@@ -29,7 +29,7 @@ async function main(): Promise<void> {
     const tsBuffer: buffer.Buffer = fs.readFileSync(process.argv[2]);
     const tsFile: mpegts.MPEGTS = new mpegts.MPEGTS(new Uint8Array(tsBuffer.buffer, tsBuffer.byteOffset, tsBuffer.length));
     let videoStreamPID: number = -1;
-    
+
     // assume there's just one PMT
     for (const stream of tsFile.pmts[0].pmt.streams) {
         if (stream.streamType !== 0x1B)
@@ -46,10 +46,9 @@ async function main(): Promise<void> {
         decrypter.beginDecryptSession();
         const nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload!);
 
-        for (const nalu of nalus){
-            try{decrypter.decryptNALU(nalu);}
-            catch(e){console.log(nalus.at(-1),pes,e);process.exit(1);}
-        }
+        for (const nalu of nalus)
+            decrypter.decryptNALU(nalu);
+
 
         let newNALU: Uint8Array = nalutil.joinNALU(nalus);
 

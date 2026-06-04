@@ -19,10 +19,24 @@ class Decrypter {
     sessionBegin: boolean = false;
 
     constructor() {
-        globalThis.self={location:globalThis.location={hash:"",host:"",hostname:"",href:`blob:https://www.12371.cn/5bca710b-9f02-41f0-a9f1-102bbc65192a`,origin:"https://www.12371.cn",pathname:"",port:"",protocol:"blob:",search:""}};
+        // trick the cctv.worker.js into thinking it is in a genuine environment
+        globalThis.self = {
+            location: globalThis.location = {
+                hash: "",
+                host: "",
+                hostname: "",
+                href: "blob:https://www.12371.cn/5bca710b-9f02-41f0-a9f1-102bbc65192a",
+                origin: "https://www.12371.cn",
+                pathname: "",
+                port: "",
+                protocol: "blob:",
+                search: ""
+            }
+        };
+
         this.CNTVH5PlayerModule = cctvWorkerModule.CNTVModule();
         this.loadFinished = new Promise(
-            resolve => {        
+            resolve => {
                 this.CNTVH5PlayerModule.onRuntimeInitialized = () => {
                     resolve();
                 }
@@ -150,7 +164,7 @@ class Decrypter {
         // p == addr2
         // c == data.payload.byteLength
         // l == pageHost.length
-        // 
+        //
         // in this version i simplified the CNTVH5PlayerModule argument
         for (let i = 0; i < this.vmpTag.length; i++)
             if ("0123456".includes(this.vmpTag[i]))
