@@ -1,7 +1,6 @@
 /* 2026-05-12 18:20:40  4f63a66bf8e9c0c825f898b5c1015373 */
 console.debug('CCTV_Woker_BTime', '2026-05-12 18:20:40');
-import{XMLHttpRequest}from"xmlhttprequest";
-export{CNTVModule};
+export { CNTVModule };
 var CNTVModule = function() {
         var _scriptDir = "undefined" != typeof document && document.currentScript ? document.currentScript.src : void 0;
         return function(CNTVModule) {
@@ -406,8 +405,22 @@ var CNTVModule = function() {
             };
             var ASM_CONSTS = [function($0) {
                 function theAnswer(thearg) {
+                    var i = {
+                        location: {
+                            hash: "",
+                            host: "",
+                            hostname: "",
+                            href: "blob:https://www.12371.cn/5bca710b-9f02-41f0-a9f1-102bbc65192a",
+                            origin: "https://www.12371.cn",
+                            pathname: "",
+                            port: "",
+                            protocol: "blob:",
+                            search: ""
+                        }
+                    };
+                    i.self = { location: i.location };
                     var name = UTF8ToString(thearg),
-                        a = eval(name),
+                        a = eval(`i.${name}`),
                         b = lengthBytesUTF8(a) + 1,
                         c = _malloc(b);
                     return stringToUTF8(a, c, b), c
@@ -2715,7 +2728,22 @@ var CNTVModule = function() {
             }
 
             function emval_get_global() {
-                return "object" == typeof globalThis ? globalThis : Function("return this")()
+                var i = {
+                    location: {
+                        hash: "",
+                        host: "",
+                        hostname: "",
+                        href: "blob:https://www.12371.cn/5bca710b-9f02-41f0-a9f1-102bbc65192a",
+                        origin: "https://www.12371.cn",
+                        pathname: "",
+                        port: "",
+                        protocol: "blob:",
+                        search: ""
+                    }
+                };
+                i.self = { location: i.location };
+                return i;
+                // return "object" == typeof globalThis ? globalThis : Function("return this")()
             }
 
             function __emval_get_global(A) {
@@ -3129,6 +3157,7 @@ var CNTVModule = function() {
 
             function _emscripten_start_fetch(A, r, g, B, C) {
                 void 0 !== Module && (Module.noExitRuntime = !0);
+                return A;
 
                 function n(A, e, t) {
                     i ? dynCall_vi(i, A) : r && r(A)

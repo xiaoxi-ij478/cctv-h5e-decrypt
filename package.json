@@ -19,8 +19,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "js-crc": "^0.3.1",
-    "xmlhttprequest": "^1.8.0"
+    "js-crc": "^0.3.1"
   },
   "devDependencies": {
     "@types/js-crc": "^0.2.3",

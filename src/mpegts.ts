@@ -770,7 +770,7 @@ class MPEGTS {
             }
 
             if (patUpdated) {
-                console.warn("multiple PAT found in one TS file; using the old one");
+                // console.warn("multiple PAT found in one TS file; using the old one");
                 continue;
             }
 

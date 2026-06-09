@@ -12,28 +12,14 @@ class Decrypter {
     private CNTVH5PlayerModule: cctvWorkerModule.CNTVModuleType;
     private shouldDecrypt: boolean = false;
     private vmpTag: string = "";
+    private static readonly pageHost: string = "https://www.12371.cn";
+    private static readonly mediaTagID: string = "myPlayer_player";
     private static readonly MemoryExtend: number = 2048;
-    private ssss:number=0;
 
     loadFinished: Promise<void>;
     sessionBegin: boolean = false;
 
     constructor() {
-        // trick the cctv.worker.js into thinking it is in a genuine environment
-        globalThis.self = {
-            location: globalThis.location = {
-                hash: "",
-                host: "",
-                hostname: "",
-                href: "blob:https://www.12371.cn/5bca710b-9f02-41f0-a9f1-102bbc65192a",
-                origin: "https://www.12371.cn",
-                pathname: "",
-                port: "",
-                protocol: "blob:",
-                search: ""
-            }
-        };
-
         this.CNTVH5PlayerModule = cctvWorkerModule.CNTVModule();
         this.loadFinished = new Promise(
             resolve => {
@@ -45,11 +31,10 @@ class Decrypter {
     }
 
     private __common(o: "InitPlayer" | "UnInitPlayer" | "UpdatePlayer"): number {
-        const mediaTagID: string = "myPlayer_player";
-        const memory: number = this.CNTVH5PlayerModule._jsmalloc(mediaTagID.length + 2048);
+        const memory: number = this.CNTVH5PlayerModule._jsmalloc(Decrypter.mediaTagID.length + 2048);
 
-        this.CNTVH5PlayerModule.HEAP8.fill(0, memory, memory + mediaTagID.length + 2048);
-        this.CNTVH5PlayerModule.HEAP8.set(Array.from(mediaTagID, e => e.charCodeAt(0)), memory);
+        this.CNTVH5PlayerModule.HEAP8.fill(0, memory, memory + Decrypter.mediaTagID.length + 2048);
+        this.CNTVH5PlayerModule.HEAP8.set(Array.from(Decrypter.mediaTagID, e => e.charCodeAt(0)), memory);
 
         let ret: number = 0;
         switch (o) {
@@ -98,11 +83,11 @@ class Decrypter {
             throw new Error("session not started yet");
 
         this.UpdatePlayer();
-        let useSpecialMediaTagID: boolean = true;
+        let useSpecialmediaTagID: boolean = true;
         switch (data.nalUnitType) {
             case 25:
                 this.shouldDecrypt = data.payload[0] === 1;
-                useSpecialMediaTagID = false;
+                useSpecialmediaTagID = false;
                 break;
 
             case 1:
@@ -135,19 +120,18 @@ class Decrypter {
         // so we switch to use prefix and suffix
         // full format is "myPlayer_player##<dts timestamp>##<seeked ? 1 : 0>
         // (though i was unable to produce 1 on seek)
-        const pageHost: string = "https://www.12371.cn";
-        const mediaTagID: string =
-            useSpecialMediaTagID ? `myPlayer_player##0##0` : `myPlayer_player`;
+        const localmediaTagID: string =
+            useSpecialmediaTagID ? `${Decrypter.mediaTagID}##0##0` : Decrypter.mediaTagID;
 
         const addr: number = this.CNTVH5PlayerModule._jsmalloc(data.payload.byteLength + 1 + 2048);
-        const addr2: number = this.CNTVH5PlayerModule._jsmalloc(mediaTagID.length + 1);
+        const addr2: number = this.CNTVH5PlayerModule._jsmalloc(localmediaTagID.length + 1);
 
         this.CNTVH5PlayerModule.HEAP8[addr] = data.header;
         this.CNTVH5PlayerModule.HEAP8.set(data.payload, addr + 1);
         this.CNTVH5PlayerModule.HEAP8.set(
-            Array.from(pageHost, e => e.charCodeAt(0)), addr + data.payload.byteLength + 1
+            Array.from(Decrypter.pageHost, e => e.charCodeAt(0)), addr + data.payload.byteLength + 1
         );
-        this.CNTVH5PlayerModule.HEAP8.set(Array.from(mediaTagID, e => e.charCodeAt(0)), addr2);
+        this.CNTVH5PlayerModule.HEAP8.set(Array.from(localmediaTagID, e => e.charCodeAt(0)), addr2);
 
         // how is this function called:
         // if (d && '' != d) for (var m in d) this[r(492)].includes(d[m]) &&
@@ -174,14 +158,14 @@ class Decrypter {
                     addr2,
                     addr,
                     data.payload.byteLength + 1,
-                    pageHost.length
+                    Decrypter.pageHost.length
                 );
 
         const decryptedLength: number = this.CNTVH5PlayerModule._CNTV_jsdecVOD8(
             addr2,
             addr,
             data.payload.byteLength + 1,
-            pageHost.length
+            Decrypter.pageHost.length
         );
 
         data.reloadData(Uint8Array.from(this.CNTVH5PlayerModule.HEAP8.subarray(addr, addr + decryptedLength)));

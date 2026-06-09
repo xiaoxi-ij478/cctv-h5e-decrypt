@@ -49,7 +49,6 @@ async function main(): Promise<void> {
         for (const nalu of nalus)
             decrypter.decryptNALU(nalu);
 
-
         let newNALU: Uint8Array = nalutil.joinNALU(nalus);
 
         for (const index of indexes) {
