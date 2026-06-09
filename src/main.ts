@@ -44,12 +44,12 @@ async function main(): Promise<void> {
 
     for (const { pes, indexes } of (tsFile.getPacketsByPID(videoStreamPID) as mpegts.MPEGTSPESPacketWithIndex[])) {
         decrypter.beginDecryptSession();
-        const nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload!);
+        let nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload!);
 
         for (const nalu of nalus)
             decrypter.decryptNALU(nalu);
 
-
+        nalus = nalus.filter(e => e.nalUnitType !== 25);
         let newNALU: Uint8Array = nalutil.joinNALU(nalus);
 
         for (const index of indexes) {
