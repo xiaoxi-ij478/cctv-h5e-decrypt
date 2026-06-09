@@ -3,30 +3,27 @@
 import * as cctvWorkerModule from "./external/cctv.worker.js";
 
 import * as nalutil from "./nalutil.js";
+import * as mpegts from "./mpegts.js";
 import * as util from "./util.js";
 
-export { Decrypter };
+export { Decrypter, decryptTsBuffer };
 
 class Decrypter {
     // each of the Decrypter instance will have its own CNTVH5PlayerModule module object
     private CNTVH5PlayerModule: cctvWorkerModule.CNTVModuleType;
     private shouldDecrypt: boolean = false;
     private vmpTag: string = "";
+    private loadFinished: Promise<void>;
+    private sessionBegin: boolean = false;
+
     private static readonly pageHost: string = "https://www.12371.cn";
     private static readonly mediaTagID: string = "myPlayer_player";
     private static readonly MemoryExtend: number = 2048;
 
-    loadFinished: Promise<void>;
-    sessionBegin: boolean = false;
-
     constructor() {
         this.CNTVH5PlayerModule = cctvWorkerModule.CNTVModule();
         this.loadFinished = new Promise(
-            resolve => {
-                this.CNTVH5PlayerModule.onRuntimeInitialized = () => {
-                    resolve();
-                }
-            }
+            resolve => this.CNTVH5PlayerModule.onRuntimeInitialized = () => resolve()
         );
     }
 
@@ -61,10 +58,11 @@ class Decrypter {
     private UnInitPlayer(): number { return this.__common("UnInitPlayer"); }
     private UpdatePlayer(): number { return this.__common("UpdatePlayer"); }
 
-    beginDecryptSession(): void {
+    async beginDecryptSession(): Promise<void> {
         if (this.sessionBegin)
             throw new Error("session already started");
 
+        await this.loadFinished;
         this.sessionBegin = true;
         this.InitPlayer();
     }
@@ -75,6 +73,12 @@ class Decrypter {
 
         this.sessionBegin = false;
         this.UnInitPlayer();
+    }
+
+    decryptUint8Array(data: Uint8Array): Uint8Array {
+        const nalu: nalutil.NALU = new nalutil.NALU(data);
+
+        return this.decryptNALU(nalu).dump();
     }
 
     // warning: this function will modify `data` in-place
@@ -175,4 +179,68 @@ class Decrypter {
 
         return data;
     }
+}
+
+async function decryptTsBuffer(tsBuffer: Uint8Array): Promise<Uint8Array> {
+    const decrypter: Decrypter = new Decrypter;
+    const tsFile: mpegts.MPEGTS = new mpegts.MPEGTS(tsBuffer);
+    let videoStreamPID: number = -1;
+
+    // assume there's just one PMT
+    for (const stream of tsFile.pmts[0].pmt.streams) {
+        if (stream.streamType !== 0x1B)
+            continue; // video stream
+
+        videoStreamPID = stream.pid;
+        break;
+    }
+
+    if (videoStreamPID === -1)
+        throw new Error("video stream not found");
+
+    for (
+        const { pes, indexes } of
+        (tsFile.getPacketsByPID(videoStreamPID) as mpegts.MPEGTSPESPacketWithIndex[])
+    ) {
+        await decrypter.beginDecryptSession();
+        const nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload!);
+
+        for (const nalu of nalus)
+            decrypter.decryptNALU(nalu);
+
+        let newNALU: Uint8Array = nalutil.joinNALU(nalus.filter(e => e.nalUnitType !== 25));
+
+        for (const index of indexes) {
+            const tsPacket: mpegts.MPEGTSPacket = tsFile.packets[index];
+            const offset: number = tsPacket.header.isContinuePacket ? 0 : pes.payloadStartOffset;
+            let bytesToCopy: number = tsPacket.payload!.byteLength;
+
+            if (!tsPacket.payload)
+                continue;
+
+            if (tsPacket.payload.byteLength - offset > newNALU.byteLength) {
+                if (!tsPacket.adaptionField)
+                    tsPacket.adaptionField = new mpegts.MPEGTSPacketAdaptionField;
+
+                tsPacket.adaptionField.length = 184 - 1 - offset - newNALU.byteLength;
+                tsPacket.adaptionField.payload = util.concatUint8Arrays(
+                    Uint8Array.of(0x00),
+
+                    tsPacket.adaptionField.length ?
+                        new Uint8Array(tsPacket.adaptionField.length - 1).fill(0xFF) :
+                        new Uint8Array()
+                );
+                bytesToCopy = newNALU.byteLength + offset;
+            }
+
+            tsPacket.payload = util.concatUint8Arrays(
+                tsPacket.payload.subarray(0, offset),
+                newNALU.subarray(0, bytesToCopy - offset)
+            );
+            newNALU = newNALU.subarray(bytesToCopy - offset);
+        }
+        decrypter.endDecryptSession();
+    }
+
+    return tsFile.dump();
 }

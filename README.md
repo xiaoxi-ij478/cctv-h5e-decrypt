@@ -27,6 +27,27 @@ npx tsx <仓库路径>/src/main.ts --get-m3u8 <你获取到的 m3u8 链接> <解
 
 当然，如果你已经下载了 .ts 或者就想自己动手，那么也可以手动传原始 .ts 和解密后 .ts 的文件名进行本地解密。
 
+### 作为库使用
+
+（我还没有在 npm 上发布包）
+
+```ts
+import * as decrypter from "cctv-h5e-decrypter";
+
+// 如果你获取到的是 ts 流：
+const tsBuffer: Uint8Array = ...; // 原始 ts 内容
+const decryptedTsBuffer = await decrypter.decryptTsBuffer(tsBuffer);
+
+// 如果你获取到的是 NAL：
+let nals: Uint8Array = ...; // NAL
+const decrypter: decrypter.Decrypter = new decrypter.Decrypter;
+// 央视目前的解密方式要求每解密一个 PES（不是 NAL）就要重置一次解密会话
+// 我只演示了解密一个 NAL 的情况，如果你自己使用需要注意这一点
+await decrypter.beginDecryptSession();
+nal = decrypter.decryptUint8Array(nal);
+decrypter.endDecryptSession();
+```
+
 ## misc.
 
 [videodl](https://github.com/CharlesPikachu/videodl) 是一个多功能视频下载器，集成了我的脚本以下载 CCTV 上的视频。

@@ -7,16 +7,24 @@
   "bugs": {
     "url": "https://github.com/xiaoxi-ij478/cctv-h5e-decrypt/issues"
   },
+  "files": ["build"],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/xiaoxi-ij478/cctv-h5e-decrypt.git"
   },
   "license": "MIT",
   "author": "xiaoxi-ij478",
-  "main": "./src/main.ts",
-  "export": "./src/exports.ts",
+  "main": "./build/decrypt.js",
+  "types": "./build/decrypt.d.ts",
+  "exports": {
+    ".": {
+        "import": "./build/decrypt.js",
+        "types": "./build/decrypt.d.ts"
+    }
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc && rm -f build/external/*.map"
   },
   "dependencies": {
     "js-crc": "^0.3.1"
