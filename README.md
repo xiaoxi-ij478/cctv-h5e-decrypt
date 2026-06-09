@@ -16,6 +16,12 @@
 
 我不是专业 JS 开发，所以没做那么细致。
 
+## 依赖
+
+- [Node.js](https://nodejs.org/)
+- [FFmpeg](https://ffmpeg.org/)（解封装/拼接音视频）
+- [MP4Box](https://github.com/gpac/gpac)（GPAC 自带，最终封装用，详见下文「时序」一节）
+
 ## 使用方法
 
 我用的是 Linux 系统，所以我只能说 Linux 下怎么用。Windows 下需要你自己想办法了
@@ -41,6 +47,14 @@ main.js 后可以跟 `--quiet-ffmpeg` 不显示 ffmpeg 的输出，然后跟的�
 注意！切片会按照你给定的顺序进行拼接，所以要注意不要弄串了。
 
 最后一个参数就是输出文件。
+
+### 关于时序（B 帧重排）
+
+最终封装改用了 **MP4Box** 而不是 ffmpeg。原因：解密产物是裸 H.264（Annex-B）流，
+ffmpeg 的裸流解复用器不会从 POC 重建合成时间（composition time），会把每一帧都写成
+`pts == dts`。这样在按解码器重排的播放器（mpv/VLC）里看似正常，但在信任容器时间戳的
+播放器/软件（QuickTime、浏览器、各类剪辑软件）里，B 帧会按解码顺序显示，画面来回抽搐。
+MP4Box 会从 POC 重建 `ctts` 表，输出在所有播放器里都正确，且全程无损（不重编码）。
 
 ## Misc.
 

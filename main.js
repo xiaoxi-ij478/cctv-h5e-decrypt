@@ -279,14 +279,18 @@ async function mainDecrypter(CNTVH5PlayerModule) {
                 return;
             }
 
-            while (currentNALIndex < nalus.length && nalus[currentNALIndex].nalUnitType === 25)
-                currentNALIndex++;
-
-            while (currentNALIndex < nalus.length)
+            // type-25 NAL units are CCTV's decryption markers; strip ALL of
+            // them (not just a leading run) so the output is clean H.264.
+            while (currentNALIndex < nalus.length) {
+                if (nalus[currentNALIndex].nalUnitType === 25) {
+                    currentNALIndex++;
+                    continue;
+                }
                 if (!outFile.write(nalus[currentNALIndex++].dump())) {
                     outFile.once("drain", writeNALUs)
                     break;
                 }
+            }
 
             if (currentNALIndex >= nalus.length)
                 outFile.end();
@@ -317,12 +321,27 @@ async function mainDecrypter(CNTVH5PlayerModule) {
         { flag: 'a' }
     );
 
-    await runFFmpeg(
-        [ concatVideoListFileName, concatAudioListFileName ],
-        process.argv.at(-1),
-        [],
-        "-map 0 -map 1".split(' ')
+    // First concatenate the per-segment elementary streams.
+    const concatVideoFile = path.join(tmpdir, "video.264"),
+          concatAudioFile = path.join(tmpdir, "audio.m4a");
+    await runFFmpeg([ concatVideoListFileName ], concatVideoFile, [], "-map 0".split(' '));
+    await runFFmpeg([ concatAudioListFileName ], concatAudioFile, [], "-map 0".split(' '));
+
+    // Mux with MP4Box, not ffmpeg: ffmpeg's raw-H.264 demuxer does not
+    // reconstruct composition order from POC, so it writes every frame with
+    // pts==dts. Players that trust container timestamps (QuickTime, browsers,
+    // NLEs) then show B-frames in decode order -> visible back-and-forth
+    // judder. MP4Box rebuilds the composition-time table (ctts) from POC.
+    const mp4boxProcess = child_process.spawn(
+        "MP4Box",
+        [ "-add", concatVideoFile, "-add", concatAudioFile, "-new", process.argv.at(-1) ],
+        { stdio: "inherit" }
     );
+    const [mp4boxCode] = await events.once(mp4boxProcess, "exit");
+    if (mp4boxCode) {
+        console.error("Error occurred while running MP4Box.");
+        process.exit(1);
+    }
     await fsPromises.rm(tmpdir, { force: true, recursive: true });
     console.log("finished.");
 }
