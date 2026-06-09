@@ -5,7 +5,9 @@ export {
     checkNumberEqual,
     checkNumberNotEqual,
     concatUint8Arrays,
-    concatUint8ArraysArr
+    concatUint8ArraysArr,
+    getURLAsUint8Array,
+    getURLAsText
 };
 
 function arrayEquals(a: Uint8Array, b: Uint8Array): boolean {
@@ -65,4 +67,20 @@ function concatUint8ArraysArr(arr: Uint8Array[]): Uint8Array {
         (a, e) => { newArr.set(e, a); return a + e.byteLength; }, 0
     );
     return newArr;
+}
+
+async function getURLAsUint8Array(url: string | URL): Promise<Uint8Array> {
+    const response = await fetch(url);
+    if (!response.ok)
+        throw new Error(`URL returned error: ${response.status} ${response.statusText}`);
+
+    return new Uint8Array(await response.arrayBuffer());
+}
+
+async function getURLAsText(url: string | URL): Promise<string> {
+    const response = await fetch(url);
+    if (!response.ok)
+        throw new Error(`URL returned error: ${response.status} ${response.statusText}`);
+
+    return await response.text();
 }

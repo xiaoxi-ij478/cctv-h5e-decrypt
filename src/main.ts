@@ -1,6 +1,6 @@
 "use strict";
 
-import * as fs from "node:fs";
+import * as fsPromises from "node:fs/promises";
 import * as os from "node:os";
 import * as buffer from "node:buffer";
 import * as process from "node:process";
@@ -10,23 +10,42 @@ import * as mpegts from "./mpegts.js";
 import * as nalutil from "./nalutil.js";
 import * as util from "./util.js";
 
-function waitForMsec(msec: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, msec));
+function usage(): never {
+    console.error("usage: main.js [--get-m3u8] {in.ts | m3u8 url} out.ts");
+    process.exit(1);
 }
 
 async function main(): Promise<void> {
-    // we must inject location into the global namespace to make the script work
-    if (process.argv.length < 3 || process.argv[2] == "--help") {
-        console.error("usage: main.js in.ts out.ts");
-        process.exit(1);
+    let getM3U8: boolean = false;
+
+    if (process.argv.length >= 3 && process.argv[2] === "--get-m3u8") {
+        getM3U8 = true;
+        process.argv.splice(2, 1);
     }
 
-    // I finally settled down to use synchronous version of the filesystem API
-    // because I don't want to deal with what the hell async/await
-    // on just a command line program
+    if (process.argv.length >= 3 && process.argv[2] === "--help")
+        usage();
+
+    if (process.argv.length !== 4)
+        usage();
+
     const decrypter: decrypt.Decrypter = new decrypt.Decrypter();
-    await decrypter.loadFinished
-    const tsBuffer: buffer.Buffer = fs.readFileSync(process.argv[2]);
+    let tsBuffer: buffer.Buffer | Uint8Array | undefined;
+    if (getM3U8) {
+        const m3u8Content: string = await util.getURLAsText(process.argv[2]);
+        const buffers: Uint8Array[] = [];
+
+        for (const line of m3u8Content.split("\n")) {
+            if (!line || line.match(/^#/))
+                continue;
+
+            buffers.push(await util.getURLAsUint8Array(new URL(line, process.argv[2])));
+        }
+
+        tsBuffer = util.concatUint8ArraysArr(buffers);
+    } else
+        tsBuffer = await fsPromises.readFile(process.argv[2]);
+
     const tsFile: mpegts.MPEGTS = new mpegts.MPEGTS(new Uint8Array(tsBuffer.buffer, tsBuffer.byteOffset, tsBuffer.length));
     let videoStreamPID: number = -1;
 
@@ -42,6 +61,7 @@ async function main(): Promise<void> {
     if (videoStreamPID === -1)
         throw new Error("video stream not found");
 
+    await decrypter.loadFinished;
     for (const { pes, indexes } of (tsFile.getPacketsByPID(videoStreamPID) as mpegts.MPEGTSPESPacketWithIndex[])) {
         decrypter.beginDecryptSession();
         let nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload!);
@@ -84,7 +104,7 @@ async function main(): Promise<void> {
         decrypter.endDecryptSession();
     }
 
-    fs.writeFileSync(process.argv[3], tsFile.dump());
+    await fsPromises.writeFile(process.argv[3], tsFile.dump());
 }
 
 main();
