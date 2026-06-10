@@ -7,6 +7,7 @@ export {
     concatUint8Arrays,
     concatUint8ArraysArr,
     getURLAsUint8Array,
+    getURLAsJSON,
     getURLAsText
 };
 
@@ -83,4 +84,12 @@ async function getURLAsText(url: string | URL): Promise<string> {
         throw new Error(`URL returned error: ${response.status} ${response.statusText}`);
 
     return await response.text();
+}
+
+async function getURLAsJSON(url: string | URL): Promise<object> {
+    const response = await fetch(url);
+    if (!response.ok)
+        throw new Error(`URL returned error: ${response.status} ${response.statusText}`);
+
+    return await response.json();
 }
