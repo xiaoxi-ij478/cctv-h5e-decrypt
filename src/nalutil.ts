@@ -17,7 +17,7 @@ function getNALUPos(buf: Uint8Array): [number, number][] {
             // !00 00 00 00 01 xx or
             // !00 00 00 01 xx
             if (
-                el == 0 &&
+                el === 0 &&
                 buf[idx + 1] === 0 &&
                 (idx !== 0 && buf[idx - 1] !== 0) &&
                 ((buf[idx + 2] === 0 && buf[idx + 3] === 1) || buf[idx + 2] === 1)
@@ -52,6 +52,8 @@ class NALU {
     nalUnitType: number;
 
     constructor(data: Uint8Array) {
+        data = data.slice();
+
         if (data.length <= 4)
             throw new Error("data length <= 4");
 
@@ -72,6 +74,8 @@ class NALU {
     }
 
     reloadData(newData: Uint8Array): void {
+        newData = newData.slice();
+
         if (this.header !== newData[0])
             throw new Error("header changed");
         this.header = newData[0];

@@ -8,7 +8,7 @@ import * as util from "./util.js";
 export {
     MPEGTSPacketBase,
     MPEGTSPacketHeader,
-    MPEGTSPacketAdaptionField,
+    MPEGTSPacketAdaptationField,
     MPEGTSPacket,
     MPEGTSPESPacketBase,
     MPEGTSPATPIDMapping,
@@ -38,7 +38,7 @@ abstract class MPEGTSPacketBase {
 
 class MPEGTSPacketHeader extends MPEGTSPacketBase {
     isContinuePacket: boolean = false;
-    hasAdaptionControl: boolean = false;
+    hasAdaptationControl: boolean = false;
     hasPayload: boolean = false;
     continuityCount: number = 0;
     transportPriority: number = 0;
@@ -67,16 +67,16 @@ class MPEGTSPacketHeader extends MPEGTSPacketBase {
         this.pid = (data[1] & 0x1F) << 8 | data[2];
 
         if (!disableIntegrityCheck)
-            util.checkNumberNotEqual(data[3] >> 4 & 0x3, 0, "adaption field control field === 0");
+            util.checkNumberNotEqual(data[3] >> 4 & 0x3, 0, "adaptation field control field === 0");
 
-        this.hasAdaptionControl = Boolean(data[3] >> 5 & 0x1);
+        this.hasAdaptationControl = Boolean(data[3] >> 5 & 0x1);
         this.hasPayload = Boolean(data[3] >> 4 & 0x1);
         // we handle off the continuity check to the user
         this.continuityCount = data[3] & 0xF;
     }
 
     reset(): void {
-        this.isContinuePacket = this.hasAdaptionControl = this.hasPayload = false;
+        this.isContinuePacket = this.hasAdaptationControl = this.hasPayload = false;
         this.continuityCount = this.transportPriority = this.pid = 0;
     }
 
@@ -85,13 +85,13 @@ class MPEGTSPacketHeader extends MPEGTSPacketBase {
             0x47,
             Number(!this.isContinuePacket) << 6 | this.transportPriority << 5 | this.pid >> 8,
             this.pid & 0xFF,
-            Number(this.hasAdaptionControl) << 5 | Number(this.hasPayload) << 4 | this.continuityCount
+            Number(this.hasAdaptationControl) << 5 | Number(this.hasPayload) << 4 | this.continuityCount
         );
     }
 }
 
-class MPEGTSPacketAdaptionField extends MPEGTSPacketBase {
-    length: number = 0;
+class MPEGTSPacketAdaptationField extends MPEGTSPacketBase {
+    payloadLength: number = 0;
     payload?: Uint8Array;
 
     constructor();
@@ -107,18 +107,18 @@ class MPEGTSPacketAdaptionField extends MPEGTSPacketBase {
     }
 
     protected init(data: Uint8Array): void {
-        this.length = data[0];
-        this.payload = data.subarray(1, this.length + 1);
+        this.payloadLength = data[0];
+        this.payload = data.subarray(1, this.payloadLength + 1);
     }
 
     reset(): void {
-        this.length = 0;
+        this.payloadLength = 0;
         this.payload = undefined;
     }
 
     dump(): Uint8Array {
         return Uint8Array.of(
-            this.length,
+            this.payloadLength,
             ...(this.payload ?? [])
         );
     }
@@ -126,7 +126,7 @@ class MPEGTSPacketAdaptionField extends MPEGTSPacketBase {
 
 class MPEGTSPacket extends MPEGTSPacketBase {
     header: MPEGTSPacketHeader = new MPEGTSPacketHeader;
-    adaptionField?: MPEGTSPacketAdaptionField;
+    adaptationField?: MPEGTSPacketAdaptationField;
     payload?: Uint8Array;
 
     constructor();
@@ -150,9 +150,9 @@ class MPEGTSPacket extends MPEGTSPacketBase {
         this.header = new MPEGTSPacketHeader(data.subarray(0, 4));
         data = data.subarray(4);
 
-        if (this.header.hasAdaptionControl) {
-            this.adaptionField = new MPEGTSPacketAdaptionField(data);
-            data = data.subarray(this.adaptionField.length + 1);
+        if (this.header.hasAdaptationControl) {
+            this.adaptationField = new MPEGTSPacketAdaptationField(data);
+            data = data.subarray(this.adaptationField.payloadLength + 1);
         }
 
         if (this.header.hasPayload)
@@ -161,14 +161,14 @@ class MPEGTSPacket extends MPEGTSPacketBase {
 
     reset(): void {
         this.header.reset();
-        this.adaptionField?.reset();
+        this.adaptationField?.reset();
         this.payload = undefined;
     }
 
     dump(): Uint8Array {
         return Uint8Array.of(
             ...this.header.dump(),
-            ...(this.adaptionField?.dump() ?? []),
+            ...(this.adaptationField?.dump() ?? []),
             ...(this.payload ?? [])
         );
     }
@@ -309,7 +309,7 @@ type MPEGTSPATPIDMapping = {
 }
 
 class MPEGTSPAT extends MPEGTSPSIPacketBase {
-    private crc32obj: jsCrc.Crc = jsCrcModels.crc_32_mpeg_2.create();
+    private crc32obj: jsCrc.Crc = jsCrcModels.default.crc_32_mpeg_2.create();
     transportStreamID: number = 0;
     programPMTPIDMapping: MPEGTSPATPIDMapping[] = [];
 
@@ -357,7 +357,7 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
     }
 
     protected realReset(): void {
-        this.crc32obj = jsCrcModels.crc_32_mpeg_2.create();
+        this.crc32obj = jsCrcModels.default.crc_32_mpeg_2.create();
         this.programPMTPIDMapping = [];
     }
 
@@ -400,7 +400,7 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
         if (sectionLength > 0x3FD)
             throw new Error("section length greater than 1021");
 
-        const crc32obj: jsCrc.Crc = jsCrcModels.crc_32_mpeg_2.create();
+        const crc32obj: jsCrc.Crc = jsCrcModels.default.crc_32_mpeg_2.create();
         let dataToCRC: Uint8Array = Uint8Array.of(
             0x00,
             0xB0 | sectionLength >> 8,
@@ -433,7 +433,7 @@ type MPEGTSPMTStreamInfo = {
 };
 
 class MPEGTSPMT extends MPEGTSPSIPacketBase {
-    private crc32obj: jsCrc.Crc = jsCrcModels.crc_32_mpeg_2.create();
+    private crc32obj: jsCrc.Crc = jsCrcModels.default.crc_32_mpeg_2.create();
     assocProgram: number = 0;
     pcrpid: number = 0;
     descriptor: Uint8Array = new Uint8Array;
@@ -491,7 +491,7 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
     }
 
     protected realReset(): void {
-        this.crc32obj = jsCrcModels.crc_32_mpeg_2.create();
+        this.crc32obj = jsCrcModels.default.crc_32_mpeg_2.create();
         this.assocProgram = this.pcrpid = 0;
         this.descriptor = new Uint8Array;
         this.streams = [];
@@ -544,7 +544,7 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
         if (sectionLength > 0x3FD)
             throw new Error("section length greater than 1021");
 
-        const crc32obj: jsCrc.Crc = jsCrcModels.crc_32_mpeg_2.create();
+        const crc32obj: jsCrc.Crc = jsCrcModels.default.crc_32_mpeg_2.create();
         let dataToCRC: Uint8Array = Uint8Array.of(
             0x02,
             0xB0 | sectionLength >> 8,

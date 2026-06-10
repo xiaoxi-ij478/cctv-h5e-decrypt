@@ -10,27 +10,27 @@ export { Decrypter, decryptTsBuffer };
 
 class Decrypter {
     // each of the Decrypter instance will have its own CNTVH5PlayerModule module object
-    private CNTVH5PlayerModule: cctvWorkerModule.CNTVModuleType;
+    private CNTVH5PlayerModule: cctvWorkerModule.CNTVModuleType = cctvWorkerModule.CNTVModule();
     private shouldDecrypt: boolean = false;
     private vmpTag: string = "";
-    private loadFinished: Promise<void>;
     private sessionBegin: boolean = false;
+    private loadFinished: Promise<void>;
 
     private static readonly pageHost: string = "https://www.12371.cn";
-    private static readonly mediaTagID: string = "myPlayer_player";
+    private static readonly mediaTagID: string = "player_container_player";
     private static readonly MemoryExtend: number = 2048;
 
     constructor() {
-        this.CNTVH5PlayerModule = cctvWorkerModule.CNTVModule();
         this.loadFinished = new Promise(
-            resolve => this.CNTVH5PlayerModule.onRuntimeInitialized = () => resolve()
+            resolve =>
+                this.CNTVH5PlayerModule.onRuntimeInitialized = () => resolve()
         );
     }
 
     private __common(o: "InitPlayer" | "UnInitPlayer" | "UpdatePlayer"): number {
-        const memory: number = this.CNTVH5PlayerModule._jsmalloc(Decrypter.mediaTagID.length + 2048);
+        const memory: number = this.CNTVH5PlayerModule._jsmalloc(Decrypter.mediaTagID.length + Decrypter.MemoryExtend);
 
-        this.CNTVH5PlayerModule.HEAP8.fill(0, memory, memory + Decrypter.mediaTagID.length + 2048);
+        this.CNTVH5PlayerModule.HEAP8.fill(0, memory, memory + Decrypter.mediaTagID.length + Decrypter.MemoryExtend);
         this.CNTVH5PlayerModule.HEAP8.set(Array.from(Decrypter.mediaTagID, e => e.charCodeAt(0)), memory);
 
         let ret: number = 0;
@@ -44,17 +44,14 @@ class Decrypter {
                 break;
 
             case "UpdatePlayer":
-                const _t: number = this.CNTVH5PlayerModule._CNTV_UpdatePlayer(memory);
-                this.vmpTag = _t.toString(16);
-                this.vmpTag = '0'.repeat(8 - this.vmpTag.length) + this.vmpTag;
-
+                this.vmpTag = this.CNTVH5PlayerModule._CNTV_UpdatePlayer(memory).toString(16).padStart(8, "0");
                 break;
         }
 
         this.CNTVH5PlayerModule._jsfree(memory);
         return ret;
     }
-    private InitPlayer(): number { return this.__common("InitPlayer"); }
+    private InitPlayer(): number   { return this.__common("InitPlayer"); }
     private UnInitPlayer(): number { return this.__common("UnInitPlayer"); }
     private UpdatePlayer(): number { return this.__common("UpdatePlayer"); }
 
@@ -65,6 +62,9 @@ class Decrypter {
         await this.loadFinished;
         this.sessionBegin = true;
         this.InitPlayer();
+        // wait for the json download to complete
+        // i know it's very inaccurate
+        await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
     endDecryptSession(): void {
@@ -75,14 +75,14 @@ class Decrypter {
         this.UnInitPlayer();
     }
 
-    decryptUint8Array(data: Uint8Array): Uint8Array {
+    decryptUint8Array(data: Uint8Array, pts: BigInt): Uint8Array {
         const nalu: nalutil.NALU = new nalutil.NALU(data);
 
-        return this.decryptNALU(nalu).dump();
+        return this.decryptNALU(nalu, pts).dump();
     }
 
     // warning: this function will modify `data` in-place
-    decryptNALU(data: nalutil.NALU): nalutil.NALU {
+    decryptNALU(data: nalutil.NALU, pts: BigInt): nalutil.NALU {
         if (!this.sessionBegin)
             throw new Error("session not started yet");
 
@@ -92,6 +92,7 @@ class Decrypter {
             case 25:
                 this.shouldDecrypt = data.payload[0] === 1;
                 useSpecialmediaTagID = false;
+
                 break;
 
             case 1:
@@ -125,9 +126,9 @@ class Decrypter {
         // full format is "myPlayer_player##<dts timestamp>##<seeked ? 1 : 0>
         // (though i was unable to produce 1 on seek)
         const localmediaTagID: string =
-            useSpecialmediaTagID ? `${Decrypter.mediaTagID}##0##0` : Decrypter.mediaTagID;
+            useSpecialmediaTagID ? `${Decrypter.mediaTagID}##${pts}##0` : Decrypter.mediaTagID;
 
-        const addr: number = this.CNTVH5PlayerModule._jsmalloc(data.payload.byteLength + 1 + 2048);
+        const addr: number = this.CNTVH5PlayerModule._jsmalloc(data.payload.byteLength + 1 + Decrypter.MemoryExtend);
         const addr2: number = this.CNTVH5PlayerModule._jsmalloc(localmediaTagID.length + 1);
 
         this.CNTVH5PlayerModule.HEAP8[addr] = data.header;
@@ -198,49 +199,70 @@ async function decryptTsBuffer(tsBuffer: Uint8Array): Promise<Uint8Array> {
     if (videoStreamPID === -1)
         throw new Error("video stream not found");
 
+    await decrypter.beginDecryptSession();
+    const peses = (tsFile.getPacketsByPID(videoStreamPID) as mpegts.MPEGTSPESPacketWithIndex[]);
     for (
-        const { pes, indexes } of
-        (tsFile.getPacketsByPID(videoStreamPID) as mpegts.MPEGTSPESPacketWithIndex[])
+        const [i, { pes, indexes }] of
+        peses.entries()
     ) {
-        await decrypter.beginDecryptSession();
         const nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload!);
 
-        for (const nalu of nalus)
-            decrypter.decryptNALU(nalu);
+        for (const nalu of nalus.slice(0, -1))
+            decrypter.decryptNALU(nalu, pes.pts);
 
-        let newNALU: Uint8Array = nalutil.joinNALU(nalus.filter(e => e.nalUnitType !== 25));
+        decrypter.decryptNALU(nalus.at(-1)!, peses[Math.min(peses.length - 1, i + 1)].pes.pts);
+
+        let newNALU: Uint8Array = nalutil.joinNALU(nalus);
 
         for (const index of indexes) {
             const tsPacket: mpegts.MPEGTSPacket = tsFile.packets[index];
             const offset: number = tsPacket.header.isContinuePacket ? 0 : pes.payloadStartOffset;
+            // copy the whole ts packet payload by default
             let bytesToCopy: number = tsPacket.payload!.byteLength;
 
             if (!tsPacket.payload)
                 continue;
 
             if (tsPacket.payload.byteLength - offset > newNALU.byteLength) {
-                if (!tsPacket.adaptionField)
-                    tsPacket.adaptionField = new mpegts.MPEGTSPacketAdaptionField;
+                // this means that the remaining NALU would be smaller than the current TS packet
+                // so we need to adjust adaptation field accordingly
 
-                tsPacket.adaptionField.length = 184 - 1 - offset - newNALU.byteLength;
-                tsPacket.adaptionField.payload = util.concatUint8Arrays(
-                    Uint8Array.of(0x00),
+                if (!tsPacket.adaptationField)
+                    tsPacket.adaptationField = new mpegts.MPEGTSPacketAdaptationField;
 
-                    tsPacket.adaptionField.length ?
-                        new Uint8Array(tsPacket.adaptionField.length - 1).fill(0xFF) :
-                        new Uint8Array()
-                );
+                // adaptation field payload length =
+                // 188 (ts packet length)
+                // - 4 (ts packet header)
+                // - 1 (adaptation field length)
+                // - offset (if it is a begin packet then also count pes header)
+                // - newNALU.byteLength (actual data length)
+                tsPacket.adaptationField.payloadLength = 188 - 4 - 1 - offset - newNALU.byteLength;
+                if (tsPacket.adaptationField.payloadLength)
+                    tsPacket.adaptationField.payload = util.concatUint8Arrays(
+                            // the header (we put nothing inside)
+                            Uint8Array.of(0x00),
+
+                            tsPacket.adaptationField.payloadLength > 1 ?
+                                new Uint8Array(tsPacket.adaptationField.payloadLength - 1).fill(0xFF) :
+                                new Uint8Array
+                        );
+
+                // set the actual copy length to the nalu length plus the pes header if exists
                 bytesToCopy = newNALU.byteLength + offset;
             }
 
             tsPacket.payload = util.concatUint8Arrays(
+                // pes header if exists
                 tsPacket.payload.subarray(0, offset),
+                // nalu content
                 newNALU.subarray(0, bytesToCopy - offset)
             );
+            console.assert(tsPacket.payload.byteLength + ((tsPacket.adaptationField?.payloadLength ?? -1) + 1) === 184);
+            // remove the copied bytes
             newNALU = newNALU.subarray(bytesToCopy - offset);
         }
-        decrypter.endDecryptSession();
     }
+    decrypter.endDecryptSession();
 
     return tsFile.dump();
 }

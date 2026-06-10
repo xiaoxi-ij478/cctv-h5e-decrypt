@@ -2446,21 +2446,11 @@ const TEST_DATA_1: Uint8Array = Uint8Array.of(
 function testMain(): void {
     const tsFile: mpegts.MPEGTS = new mpegts.MPEGTS(TEST_DATA_1);
 
-    for (const packet of tsFile.packets)
-        console.log(packet);
-
-    console.log(tsFile.pat);
-    console.log(tsFile.pmts);
-    console.log(tsFile.pmts[0].pmt);
-    console.log(tsFile.getPacketsByPID(0));
-    console.log(tsFile.getPacketsByPID(4096));
-    console.log(tsFile.getPacketsByPID(256));
-    console.log(tsFile.getPacketsByPID(257));
-    for (let i=0;i<tsFile.packets.length;i++){
+    for (let i=0;i<tsFile.packets.length;i++)
         console.assert(
             util.arrayEquals(tsFile.packets[i].dump(), TEST_DATA_1.slice((i) * 188, (i+1)*188)),
             "package %d not equal when dumped: %o", i, tsFile.packets[i]
-        );}
+        );
 }
 
 testMain();

@@ -39,12 +39,11 @@ const tsBuffer: Uint8Array = ...; // 原始 ts 内容
 const decryptedTsBuffer = await decrypter.decryptTsBuffer(tsBuffer);
 
 // 如果你获取到的是 NAL：
-let nals: Uint8Array = ...; // NAL
+let nal: Uint8Array = ...; // NAL
+let pts: BigInt = ...; // NAL 对应的 PTS
 const decrypter: decrypter.Decrypter = new decrypter.Decrypter;
-// 央视目前的解密方式要求每解密一个 PES（不是 NAL）就要重置一次解密会话
-// 我只演示了解密一个 NAL 的情况，如果你自己使用需要注意这一点
 await decrypter.beginDecryptSession();
-nal = decrypter.decryptUint8Array(nal);
+nal = decrypter.decryptUint8Array(nal, pts);
 decrypter.endDecryptSession();
 ```
 

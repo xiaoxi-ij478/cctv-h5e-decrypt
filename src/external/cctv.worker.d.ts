@@ -1,4 +1,4 @@
-export { CNTVjsdecFuncType, CNTVModule, CNTVModuleType }; 
+export { CNTVjsdecFuncType, CNTVModule, CNTVModuleType };
 
 type CNTVjsdecFuncType = (
     mediaTagIDAddr: number,

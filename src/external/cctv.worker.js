@@ -3,6 +3,56 @@ console.debug('CCTV_Woker_BTime', '2026-05-12 18:20:40');
 export { CNTVModule };
 var CNTVModule = function() {
         var _scriptDir = "undefined" != typeof document && document.currentScript ? document.currentScript.src : void 0;
+
+        if (typeof XMLHttpRequest === "undefined" && ("object" == typeof process && "object" == typeof process.versions && "string" == typeof process.versions.node))
+            // a very simple xhr implementation to fit the need of __emscripten_fetch_xhr()
+            globalThis.XMLHttpRequest = class {
+                #url;
+                #method;
+                onload;
+                onreadystatechange;
+                onerror;
+                response;
+                status = 0;
+                statusText = "";
+                readyState = 0;
+
+                open(method, url, async = true) {
+                    this.#url = url;
+                    this.#method = method;
+
+                    if (!async) // let's hope not so
+                        throw new Error("not supported");
+
+                    this.readyState = 1;
+                    this.onreadystatechange?.();
+                }
+
+                send(body) {
+                    fetch(
+                        this.#url,
+                        { body, method: this.#method }
+                    ).then(resp => {
+                        this.readyState = 4;
+                        this.status = resp.status;
+                        this.statusText = resp.statusText;
+
+                        if (!resp.ok)
+                            throw new Error;
+
+                        return resp.arrayBuffer();
+                    }).then(abuffer => {
+                        this.response = abuffer;
+
+                        this.onload?.();
+                        this.onreadystatechange?.();
+                    }).catch(err => {
+                        this.onerror?.();
+                        this.onreadystatechange?.();
+                    });
+                }
+            };
+
         return function(CNTVModule) {
             CNTVModule = CNTVModule || {};
             var Module = void 0 !== CNTVModule ? CNTVModule : {},
@@ -2830,7 +2880,7 @@ var CNTVModule = function() {
             }
 
             function _emscripten_get_callstack(A, e, t) {
-                A = `https://www.12371.cn/5bca710b-9f02-41f0-a9f1-102bbc65192a`;
+                A = "blob:https://www.12371.cn/5bca710b-9f02-41f0-a9f1-102bbc65192a";
                 return !e || t <= 0 ? lengthBytesUTF8(A) + 1 : stringToUTF8(A, e, t) + 1
             }
 
@@ -3079,6 +3129,7 @@ var CNTVModule = function() {
                             d.setRequestHeader(M, F)
                         }
                     Fetch.xhrs.push(d);
+
                     o = Fetch.xhrs.length, n = (HEAPU32[g + 0 >> 2] = o, l && t ? HEAPU8.slice(l, l + t) : null);
                     d.onload = function(A) {
                         var e = d.response ? d.response.byteLength : 0,
@@ -3097,6 +3148,7 @@ var CNTVModule = function() {
                     }, d.onreadystatechange = function(A) {
                         HEAPU16[g + 40 >> 1] = d.readyState, 2 <= d.readyState && (HEAPU16[g + 42 >> 1] = d.status), e && e(g, d, A)
                     };
+
                     try {
                         d.send(n)
                     } catch (A) {
@@ -3157,7 +3209,6 @@ var CNTVModule = function() {
 
             function _emscripten_start_fetch(A, r, g, B, C) {
                 void 0 !== Module && (Module.noExitRuntime = !0);
-                return A;
 
                 function n(A, e, t) {
                     i ? dynCall_vi(i, A) : r && r(A)
@@ -3192,8 +3243,9 @@ var CNTVModule = function() {
                     w = !!(4 & c),
                     u = !!(32 & c),
                     c = !!(16 & c);
-                    __emscripten_fetch_xhr(A, n, E, I, o);
-                    return A;
+                __emscripten_fetch_xhr(A, n, E, I, o);
+                return A;
+
                 if ((!c || "EM_IDB_STORE" === t || "EM_IDB_DELETE" === t) && !Fetch.dbInstance) return E(A), 0;
                 if ("EM_IDB_STORE" === t) {
                     var d = HEAPU32[e + 84 >> 2];
@@ -3210,8 +3262,7 @@ var CNTVModule = function() {
                 return A
             }
             function _emscripten_date_now() {
-                var e=0
-                return e
+                return 0
             }
 
             function _gettimeofday(A) {

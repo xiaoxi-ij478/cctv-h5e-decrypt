@@ -7,6 +7,7 @@ import * as process from "node:process";
 
 import * as decrypt from "./decrypt.js";
 import * as util from "./util.js";
+import * as mpegts from "./mpegts.js";
 
 function usage(): never {
     console.error("usage: main.js [--get-m3u8] {in.ts | m3u8 url} out.ts");
@@ -45,5 +46,4 @@ async function main(): Promise<void> {
 
     await fsPromises.writeFile(process.argv[3], await decrypt.decryptTsBuffer(tsBuffer));
 }
-
 main();

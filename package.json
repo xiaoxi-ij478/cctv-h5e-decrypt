@@ -7,7 +7,9 @@
   "bugs": {
     "url": "https://github.com/xiaoxi-ij478/cctv-h5e-decrypt/issues"
   },
-  "files": ["build"],
+  "files": [
+    "build"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/xiaoxi-ij478/cctv-h5e-decrypt.git"
@@ -18,8 +20,8 @@
   "types": "./build/decrypt.d.ts",
   "exports": {
     ".": {
-        "import": "./build/decrypt.js",
-        "types": "./build/decrypt.d.ts"
+      "import": "./build/decrypt.js",
+      "types": "./build/decrypt.d.ts"
     }
   },
   "scripts": {
