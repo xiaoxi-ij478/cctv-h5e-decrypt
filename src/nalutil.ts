@@ -52,8 +52,6 @@ class NALU {
     nalUnitType: number;
 
     constructor(data: Uint8Array) {
-        data = data.slice();
-
         if (data.length <= 4)
             throw new Error("data length <= 4");
 
@@ -74,8 +72,6 @@ class NALU {
     }
 
     reloadData(newData: Uint8Array): void {
-        newData = newData.slice();
-
         if (this.header !== newData[0])
             throw new Error("header changed");
         this.header = newData[0];

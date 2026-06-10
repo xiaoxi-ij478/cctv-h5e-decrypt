@@ -26,7 +26,7 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc && rm -f build/external/*.map"
+    "build": "tsc && rm -f build/external/*.map && diff src/external/cctv.worker.js ~/cctv.worker.orig.js -u >src/external/cctv.worker.diff"
   },
   "dependencies": {
     "js-crc": "^0.3.1"

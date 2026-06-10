@@ -1,5 +1,5 @@
---- cctv.worker.js	2026-06-11 01:29:16.044347515 +0800
-+++ /home/xiaoxi/cctv.worker.orig.js	2026-06-10 04:07:20.928828009 +0800
+--- src/external/cctv.worker.js	2026-06-11 01:43:58.900291833 +0800
++++ /home/xiaoxi/cctv.worker.orig.js	2026-06-11 01:44:20.044370177 +0800
 @@ -1,58 +1,7 @@
  /* 2026-05-12 18:20:40  4f63a66bf8e9c0c825f898b5c1015373 */
  console.debug('CCTV_Woker_BTime', '2026-05-12 18:20:40');
@@ -85,7 +85,7 @@
                      return stringToUTF8(a, c, b), c
 @@ -2778,22 +2713,7 @@
              }
-
+ 
              function emval_get_global() {
 -                var i = {
 -                    location: {
@@ -105,45 +105,18 @@
 -                // return "object" == typeof globalThis ? globalThis : Function("return this")()
 +                return "object" == typeof globalThis ? globalThis : Function("return this")()
              }
-
+ 
              function __emval_get_global(A) {
-@@ -2827,6 +2747,10 @@
-                 Module.abort()
+@@ -2884,7 +2804,7 @@
              }
-
-+            function _emscripten_date_now() {
-+                return Date.now()
-+            }
-+
-             function __emscripten_traverse_stack(A) {
-                 if (!A || !A.callee || !A.callee.name) return [null, "", ""];
-                 A.callee.toString();
-@@ -2880,7 +2804,7 @@
-             }
-
+ 
              function _emscripten_get_callstack(A, e, t) {
 -                A = "blob:https://www.12371.cn/5bca710b-9f02-41f0-a9f1-102bbc65192a";
 +                A = _emscripten_get_callstack_js(A);
                  return !e || t <= 0 ? lengthBytesUTF8(A) + 1 : stringToUTF8(A, e, t) + 1
              }
-
-@@ -3129,7 +3053,6 @@
-                             d.setRequestHeader(M, F)
-                         }
-                     Fetch.xhrs.push(d);
--
-                     o = Fetch.xhrs.length, n = (HEAPU32[g + 0 >> 2] = o, l && t ? HEAPU8.slice(l, l + t) : null);
-                     d.onload = function(A) {
-                         var e = d.response ? d.response.byteLength : 0,
-@@ -3148,7 +3071,6 @@
-                     }, d.onreadystatechange = function(A) {
-                         HEAPU16[g + 40 >> 1] = d.readyState, 2 <= d.readyState && (HEAPU16[g + 42 >> 1] = d.status), e && e(g, d, A)
-                     };
--
-                     try {
-                         d.send(n)
-                     } catch (A) {
-@@ -3243,9 +3165,6 @@
+ 
+@@ -3245,9 +3165,6 @@
                      w = !!(4 & c),
                      u = !!(32 & c),
                      c = !!(16 & c);
@@ -153,24 +126,3 @@
                  if ((!c || "EM_IDB_STORE" === t || "EM_IDB_DELETE" === t) && !Fetch.dbInstance) return E(A), 0;
                  if ("EM_IDB_STORE" === t) {
                      var d = HEAPU32[e + 84 >> 2];
-@@ -3261,12 +3180,9 @@
-                 });
-                 return A
-             }
--            function _emscripten_date_now() {
--                return 0
--            }
-
-             function _gettimeofday(A) {
--                var e = 0
-+                var e = Date.now();
-                 return HEAP32[A >> 2] = e / 1e3 | 0, HEAP32[A + 4 >> 2] = e % 1e3 * 1e3 | 0, 0
-             }
-
-@@ -3743,4 +3659,4 @@
-             console.log(A)
-         }
-         this.isCrossAudio = !0, this.getBrowser = e
--    });
-+    });
-\ No newline at end of file

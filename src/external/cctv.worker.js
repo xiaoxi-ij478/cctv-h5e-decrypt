@@ -2827,6 +2827,10 @@ var CNTVModule = function() {
                 Module.abort()
             }
 
+            function _emscripten_date_now() {
+                return Date.now()
+            }
+
             function __emscripten_traverse_stack(A) {
                 if (!A || !A.callee || !A.callee.name) return [null, "", ""];
                 A.callee.toString();
@@ -3129,7 +3133,6 @@ var CNTVModule = function() {
                             d.setRequestHeader(M, F)
                         }
                     Fetch.xhrs.push(d);
-
                     o = Fetch.xhrs.length, n = (HEAPU32[g + 0 >> 2] = o, l && t ? HEAPU8.slice(l, l + t) : null);
                     d.onload = function(A) {
                         var e = d.response ? d.response.byteLength : 0,
@@ -3148,7 +3151,6 @@ var CNTVModule = function() {
                     }, d.onreadystatechange = function(A) {
                         HEAPU16[g + 40 >> 1] = d.readyState, 2 <= d.readyState && (HEAPU16[g + 42 >> 1] = d.status), e && e(g, d, A)
                     };
-
                     try {
                         d.send(n)
                     } catch (A) {
@@ -3261,12 +3263,9 @@ var CNTVModule = function() {
                 });
                 return A
             }
-            function _emscripten_date_now() {
-                return 0
-            }
 
             function _gettimeofday(A) {
-                var e = 0
+                var e = Date.now();
                 return HEAP32[A >> 2] = e / 1e3 | 0, HEAP32[A + 4 >> 2] = e % 1e3 * 1e3 | 0, 0
             }
 
