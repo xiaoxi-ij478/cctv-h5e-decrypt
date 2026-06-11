@@ -29,7 +29,7 @@ const cmdutil = {
 };
 
 function usage(): never {
-    cmdutil.error("usage: main.js [--quiet] [--get-m3u8] [--get-guid <resolution>] {in.ts | m3u8 url} out.ts");
+    cmdutil.error("usage: main.js [--quiet] [--get-m3u8] [--get-guid <resolution>] {in.ts | url} out.ts");
     process.exit(1);
 }
 

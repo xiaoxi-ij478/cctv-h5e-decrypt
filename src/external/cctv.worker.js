@@ -460,8 +460,8 @@ var CNTVModule = function() {
                             hash: "",
                             host: "",
                             hostname: "",
-                            href: "blob:https://www.12371.cn/5bca710b-9f02-41f0-a9f1-102bbc65192a",
-                            origin: "https://www.12371.cn",
+                            href: "blob:https://tv.cctv.com/5bca710b-9f02-41f0-a9f1-102bbc65192a",
+                            origin: "https://tv.cctv.com",
                             pathname: "",
                             port: "",
                             protocol: "blob:",
@@ -2783,8 +2783,8 @@ var CNTVModule = function() {
                         hash: "",
                         host: "",
                         hostname: "",
-                        href: "blob:https://www.12371.cn/5bca710b-9f02-41f0-a9f1-102bbc65192a",
-                        origin: "https://www.12371.cn",
+                        href: "blob:https://tv.cctv.com/5bca710b-9f02-41f0-a9f1-102bbc65192a",
+                        origin: "https://tv.cctv.com",
                         pathname: "",
                         port: "",
                         protocol: "blob:",
@@ -2884,7 +2884,7 @@ var CNTVModule = function() {
             }
 
             function _emscripten_get_callstack(A, e, t) {
-                A = "blob:https://www.12371.cn/5bca710b-9f02-41f0-a9f1-102bbc65192a";
+                A = "blob:https://tv.cctv.com/5bca710b-9f02-41f0-a9f1-102bbc65192a";
                 return !e || t <= 0 ? lengthBytesUTF8(A) + 1 : stringToUTF8(A, e, t) + 1
             }
 

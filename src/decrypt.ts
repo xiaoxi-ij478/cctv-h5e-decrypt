@@ -64,7 +64,7 @@ class Decrypter {
         this.InitPlayer();
         // wait for the json download to complete
         // i know it's very inaccurate
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     endDecryptSession(): void {
@@ -75,14 +75,14 @@ class Decrypter {
         this.UnInitPlayer();
     }
 
-    decryptUint8Array(data: Uint8Array, pts: BigInt): Uint8Array {
+    decryptUint8Array(data: Uint8Array): Uint8Array {
         const nalu: nalutil.NALU = new nalutil.NALU(data);
 
-        return this.decryptNALU(nalu, pts).dump();
+        return this.decryptNALU(nalu).dump();
     }
 
     // warning: this function will modify `data` in-place
-    decryptNALU(data: nalutil.NALU, pts: BigInt): nalutil.NALU {
+    decryptNALU(data: nalutil.NALU): nalutil.NALU {
         if (!this.sessionBegin)
             throw new Error("session not started yet");
 
@@ -126,7 +126,7 @@ class Decrypter {
         // full format is "myPlayer_player##<dts timestamp>##<seeked ? 1 : 0>
         // (though i was unable to produce 1 on seek)
         const localmediaTagID: string =
-            useSpecialmediaTagID ? `${Decrypter.mediaTagID}##${pts}##0` : Decrypter.mediaTagID;
+            useSpecialmediaTagID ? `${Decrypter.mediaTagID}##1000000##0` : Decrypter.mediaTagID;
 
         const addr: number = this.CNTVH5PlayerModule._jsmalloc(data.payload.byteLength + 1 + Decrypter.MemoryExtend);
         const addr2: number = this.CNTVH5PlayerModule._jsmalloc(localmediaTagID.length + 1);
@@ -205,10 +205,8 @@ class Decrypter {
         ) {
             const nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload!);
 
-            for (const nalu of nalus.slice(0, -1))
-                this.decryptNALU(nalu, pes.pts);
-
-            this.decryptNALU(nalus.at(-1)!, peses[Math.min(peses.length - 1, i + 1)].pes.pts);
+            for (const nalu of nalus)
+                this.decryptNALU(nalu);
 
             let newNALU: Uint8Array = nalutil.joinNALU(nalus);
 

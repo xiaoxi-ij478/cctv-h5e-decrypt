@@ -68,8 +68,7 @@ const decryptedTsBuffer = decrypter.decryptTsBuffer(tsBuffer);
 
 // 如果你获取到的是 NAL：
 let nal: Uint8Array = ...; // NAL
-let pts: BigInt = ...; // NAL 对应的 PTS
-nal = decrypter.decryptUint8Array(nal, pts);
+nal = decrypter.decryptUint8Array(nal);
 
 decrypter.endDecryptSession();
 ```

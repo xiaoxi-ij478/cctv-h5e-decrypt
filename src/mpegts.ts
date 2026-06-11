@@ -596,10 +596,10 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
 class MPEGTSPES extends MPEGTSPESPacketBase {
     streamID: number = 0;
     // NOTE! pts and dts are 33-bit unsigned integers so they must be stored as BigInts
-    pts: BigInt = 0n;
-    dts: BigInt = 0n;
-    hasPTS: boolean = false;
-    hasDTS: boolean = false;
+    // pts: BigInt = 0n;
+    // dts: BigInt = 0n;
+    // hasPTS: boolean = false;
+    // hasDTS: boolean = false;
     header: Uint8Array = new Uint8Array;
     payload: Uint8Array = new Uint8Array;
     payloadStartOffset: number = 0;
@@ -636,7 +636,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
         if (this.streamID >> 5 === 6 || this.streamID >> 4 === 14) {
             if (!disableIntegrityCheck)
                 util.checkNumberEqual(this.buffer[0] >> 6, 2, "start two bits not 2", true);
-
+/*
             switch (this.buffer[1] >> 6) {
                 case 3:
                     this.hasDTS = this.hasPTS = true;
@@ -694,7 +694,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
                     (BigInt(this.buffer[6]) << 7n | BigInt(this.buffer[7]) >> 1n)
                 );
             }
-
+*/
             this.payloadStartOffset = 6 + 3 + this.buffer[2];
             this.header = util.appendUint8Array(
                 this.header,
@@ -710,8 +710,8 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
 
     protected realReset(): void {
         this.streamID = 0;
-        this.pts = this.dts = 0n;
-        this.hasPTS = this.hasDTS = false;
+        // this.pts = this.dts = 0n;
+        // this.hasPTS = this.hasDTS = false;
         this.header = this.payload = new Uint8Array;
     }
 
