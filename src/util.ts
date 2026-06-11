@@ -5,7 +5,7 @@ export {
     checkNumberEqual,
     checkNumberNotEqual,
     concatUint8Arrays,
-    concatUint8ArraysArr,
+    appendUint8Array,
     getURLAsUint8Array,
     getURLAsJSON,
     getURLAsText
@@ -46,28 +46,42 @@ function checkNumberNotEqual(
     }
 }
 
-function concatUint8Arrays(...arr: Uint8Array[]): Uint8Array {
+// concat uint8array
+// arr: arrays to concat
+// toBuffer: if provided, the existing arraybuffer to append
+//    but if the provided buffer is too small, we'll allocate a new buffer
+function concatUint8Arrays(arr: Uint8Array[], toBuffer?: ArrayBuffer): Uint8Array {
+    const totalLength: number = arr.reduce((a, e) => a + e.byteLength, 0);
+    let reallocated: boolean = false;
+
+    if (toBuffer && toBuffer.byteLength < totalLength) {
+        reallocated = true;
+        toBuffer = new ArrayBuffer(totalLength);
+    }
+
     const newArr: Uint8Array = new Uint8Array(
-        new ArrayBuffer(
-            arr.reduce((a, e) => a + e.byteLength, 0)
-        )
+        toBuffer ?? new ArrayBuffer(totalLength),
+        0,
+        totalLength
     );
-    arr.reduce(
-        (a, e) => { newArr.set(e, a); return a + e.byteLength; }, 0
-    );
+    if (toBuffer && !reallocated)
+        arr.slice(1).reduce(
+            (a, e) => { newArr.set(e, a); return a + e.byteLength; }, arr[0].byteLength
+        );
+    else
+        arr.reduce(
+            (a, e) => { newArr.set(e, a); return a + e.byteLength; }, 0
+        );
+
     return newArr;
 }
 
-function concatUint8ArraysArr(arr: Uint8Array[]): Uint8Array {
-    const newArr: Uint8Array = new Uint8Array(
-        new ArrayBuffer(
-            arr.reduce((a, e) => a + e.byteLength, 0)
-        )
-    );
-    arr.reduce(
-        (a, e) => { newArr.set(e, a); return a + e.byteLength; }, 0
-    );
-    return newArr;
+// a special case for concatUint8Arrays
+// append to dst's underlying arraybuffer
+// this may cause a reallocation if dst's arraybuffer is not large enough,
+// so we return the array in case it reallocates
+function appendUint8Array(dst: Uint8Array, src: Uint8Array): Uint8Array {
+    return concatUint8Arrays([dst, src], dst.buffer);
 }
 
 async function getURLAsUint8Array(url: string | URL): Promise<Uint8Array> {

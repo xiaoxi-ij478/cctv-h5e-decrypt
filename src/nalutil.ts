@@ -39,7 +39,7 @@ function splitNALU(buf: Uint8Array): NALU[] {
 }
 
 function joinNALU(nalus: NALU[]): Uint8Array {
-    return util.concatUint8ArraysArr(nalus.map((e, i) => e.dump()));
+    return util.concatUint8Arrays(nalus.map((e, i) => e.dump()));
 }
 
 class NALU {

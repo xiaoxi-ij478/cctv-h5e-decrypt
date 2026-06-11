@@ -6,7 +6,7 @@ import * as nalutil from "./nalutil.js";
 import * as mpegts from "./mpegts.js";
 import * as util from "./util.js";
 
-export { Decrypter, decryptTsBuffer };
+export { Decrypter };
 
 class Decrypter {
     // each of the Decrypter instance will have its own CNTVH5PlayerModule module object
@@ -180,89 +180,86 @@ class Decrypter {
 
         return data;
     }
-}
 
-async function decryptTsBuffer(tsBuffer: Uint8Array): Promise<Uint8Array> {
-    const decrypter: Decrypter = new Decrypter;
-    const tsFile: mpegts.MPEGTS = new mpegts.MPEGTS(tsBuffer);
-    let videoStreamPID: number = -1;
+    // warning: this function will modify `tsFile` in-place
+    decryptTsBuffer(tsFile: mpegts.MPEGTS): mpegts.MPEGTS {
+        let videoStreamPID: number = -1;
+/*
+        // assume there's just one PMT
+        for (const stream of tsFile.pmts[0].pmt.streams) {
+            if (stream.streamType !== 0x1B)
+                continue; // video stream
 
-    // assume there's just one PMT
-    for (const stream of tsFile.pmts[0].pmt.streams) {
-        if (stream.streamType !== 0x1B)
-            continue; // video stream
-
-        videoStreamPID = stream.pid;
-        break;
-    }
-
-    if (videoStreamPID === -1)
-        throw new Error("video stream not found");
-
-    await decrypter.beginDecryptSession();
-    const peses = (tsFile.getPacketsByPID(videoStreamPID) as mpegts.MPEGTSPESPacketWithIndex[]);
-    for (
-        const [i, { pes, indexes }] of
-        peses.entries()
-    ) {
-        const nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload!);
-
-        for (const nalu of nalus.slice(0, -1))
-            decrypter.decryptNALU(nalu, pes.pts);
-
-        decrypter.decryptNALU(nalus.at(-1)!, peses[Math.min(peses.length - 1, i + 1)].pes.pts);
-
-        let newNALU: Uint8Array = nalutil.joinNALU(nalus);
-
-        for (const index of indexes) {
-            const tsPacket: mpegts.MPEGTSPacket = tsFile.packets[index];
-            const offset: number = tsPacket.header.isContinuePacket ? 0 : pes.payloadStartOffset;
-            // copy the whole ts packet payload by default
-            let bytesToCopy: number = tsPacket.payload!.byteLength;
-
-            if (!tsPacket.payload)
-                continue;
-
-            if (tsPacket.payload.byteLength - offset > newNALU.byteLength) {
-                // this means that the remaining NALU would be smaller than the current TS packet
-                // so we need to adjust adaptation field accordingly
-
-                if (!tsPacket.adaptationField)
-                    tsPacket.adaptationField = new mpegts.MPEGTSPacketAdaptationField;
-
-                // adaptation field payload length =
-                // 188 (ts packet length)
-                // - 4 (ts packet header)
-                // - 1 (adaptation field length)
-                // - offset (if it is a begin packet then also count pes header)
-                // - newNALU.byteLength (actual data length)
-                tsPacket.adaptationField.payloadLength = 188 - 4 - 1 - offset - newNALU.byteLength;
-                if (tsPacket.adaptationField.payloadLength)
-                    tsPacket.adaptationField.payload = util.concatUint8Arrays(
-                            // the header (we put nothing inside)
-                            Uint8Array.of(0x00),
-
-                            tsPacket.adaptationField.payloadLength > 1 ?
-                                new Uint8Array(tsPacket.adaptationField.payloadLength - 1).fill(0xFF) :
-                                new Uint8Array
-                        );
-
-                // set the actual copy length to the nalu length plus the pes header if exists
-                bytesToCopy = newNALU.byteLength + offset;
-            }
-
-            tsPacket.payload = util.concatUint8Arrays(
-                // pes header if exists
-                tsPacket.payload.subarray(0, offset),
-                // nalu content
-                newNALU.subarray(0, bytesToCopy - offset)
-            );
-            console.assert(tsPacket.payload.byteLength + ((tsPacket.adaptationField?.payloadLength ?? -1) + 1) === 184);
-            // remove the copied bytes
-            newNALU = newNALU.subarray(bytesToCopy - offset);
+            videoStreamPID = stream.pid;
+            break;
         }
-    }
-    decrypter.endDecryptSession();
 
-    return tsFile.dump();
+        if (videoStreamPID === -1)
+            throw new Error("video stream not found");
+*/
+        // for now, just assume 0x100 is video PID
+        const peses = (tsFile.getPacketsByPID(0x100) as mpegts.MPEGTSPESPacketWithIndex[]);
+        for (
+            const [i, { pes, indexes }] of
+            peses.entries()
+        ) {
+            const nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload!);
+
+            for (const nalu of nalus.slice(0, -1))
+                this.decryptNALU(nalu, pes.pts);
+
+            this.decryptNALU(nalus.at(-1)!, peses[Math.min(peses.length - 1, i + 1)].pes.pts);
+
+            let newNALU: Uint8Array = nalutil.joinNALU(nalus);
+
+            for (const index of indexes) {
+                const tsPacket: mpegts.MPEGTSPacket = tsFile.packets[index];
+                const offset: number = tsPacket.header.isContinuePacket ? 0 : pes.payloadStartOffset;
+                // copy the whole ts packet payload by default
+                let bytesToCopy: number = tsPacket.payload!.byteLength;
+
+                if (!tsPacket.payload)
+                    continue;
+
+                if (tsPacket.payload.byteLength - offset > newNALU.byteLength) {
+                    // this means that the remaining NALU would be smaller than the current TS packet
+                    // so we need to adjust adaptation field accordingly
+
+                    if (!tsPacket.adaptationField)
+                        tsPacket.adaptationField = new mpegts.MPEGTSPacketAdaptationField;
+
+                    // adaptation field payload length =
+                    // 188 (ts packet length)
+                    // - 4 (ts packet header)
+                    // - 1 (adaptation field length)
+                    // - offset (if it is a begin packet then also count pes header)
+                    // - newNALU.byteLength (actual data length)
+                    tsPacket.adaptationField.payloadLength = 188 - 4 - 1 - offset - newNALU.byteLength;
+                    if (tsPacket.adaptationField.payloadLength)
+                        tsPacket.adaptationField.payload = util.concatUint8Arrays([
+                                // the header (we put nothing inside)
+                                Uint8Array.of(0x00),
+
+                                tsPacket.adaptationField.payloadLength > 1 ?
+                                    new Uint8Array(tsPacket.adaptationField.payloadLength - 1).fill(0xFF) :
+                                    new Uint8Array
+                            ]);
+
+                    // set the actual copy length to the nalu length plus the pes header if exists
+                    bytesToCopy = newNALU.byteLength + offset;
+                }
+
+                tsPacket.payload = util.concatUint8Arrays([
+                    // pes header if exists
+                    tsPacket.payload.subarray(0, offset),
+                    // nalu content
+                    newNALU.subarray(0, bytesToCopy - offset)
+                ]);
+                // remove the copied bytes
+                newNALU = newNALU.subarray(bytesToCopy - offset);
+            }
+        }
+
+        return tsFile;
+    }
 }
