@@ -81,7 +81,7 @@ async function *getTsFromM3U8(url: string): AsyncGenerator<Uint8Array> {
 }
 
 async function main(): Promise<void> {
-    const decrypter: decrypt.Decrypter = new decrypt.Decrypter; 
+    const decrypter: decrypt.Decrypter = new decrypt.Decrypter;
     let getM3U8: boolean = false;
     let getGUID: boolean = false;
     let guidResolution: number = 2000;
