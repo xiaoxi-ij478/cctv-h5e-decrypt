@@ -1,5 +1,5 @@
 --- src/external/cctv.worker.js	2026-06-11 20:20:36.374259245 +0800
-+++ /home/xiaoxi/cctv.worker.orig.js	2026-06-11 01:44:20.044370177 +0800
++++ /home/xiaoxi/cctv.worker.orig.js	2026-06-12 00:58:09.315493047 +0800
 @@ -1,58 +1,7 @@
  /* 2026-05-12 18:20:40  4f63a66bf8e9c0c825f898b5c1015373 */
  console.debug('CCTV_Woker_BTime', '2026-05-12 18:20:40');
