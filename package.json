@@ -26,8 +26,8 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "rm -rf build && tsc && rm -f build/external/*.map && diff src/external/cctv.worker.js ~/cctv.worker.orig.js -u >src/external/cctv.worker.diff",
-    "bundle": "esbuild src/main.ts --sourcemap=external --bundle --platform=node --format=esm --outfile=build/final/final.js"
+    "build": "rm -rf build && npx tsc && rm -f build/external/*.map && diff src/external/cctv.worker.js ~/cctv.worker.orig.js -u >src/external/cctv.worker.diff",
+    "bundle": "npx esbuild src/main.ts --sourcemap=external --bundle --platform=node --format=esm --outfile=build/final/final.js"
   },
   "dependencies": {
     "js-crc": "^0.3.1"
