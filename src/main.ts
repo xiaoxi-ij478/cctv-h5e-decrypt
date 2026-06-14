@@ -41,10 +41,10 @@ async function getM3U8FromWebPage(url: string, resolution: number): Promise<stri
     const webpageContent: string = await util.getURLAsText(url);
     let guid: string | undefined;
     for (const line of webpageContent.split("\n")) {
-        if (!line.match(/var guid\s*=/))
+        if (!line.match(/var (?:video_)?guid\s*=/))
             continue;
 
-        guid = line.replace(/.*"(.*)".*/, "$1");
+        guid = line.replace(/.*(["'])(.*)\1.*/, "$2");
         break;
     }
 
