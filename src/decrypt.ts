@@ -75,7 +75,8 @@ class Decrypter {
         this.UnInitPlayer();
     }
 
-    decryptUint8Array(data: Uint8Array): Uint8Array {
+    // this won't modify `data`
+    decryptNALUUint8Array(data: Uint8Array): Uint8Array {
         const nalu: nalutil.NALU = new nalutil.NALU(data);
 
         return this.decryptNALU(nalu).dump();
@@ -179,6 +180,13 @@ class Decrypter {
         this.CNTVH5PlayerModule._jsfree(addr2);
 
         return data;
+    }
+
+    // this won't modify `data`
+    decryptTsBufferUint8Array(data: Uint8Array): Uint8Array {
+        const tsFile: mpegts.MPEGTS = new mpegts.MPEGTS(data);
+
+        return this.decryptTsBuffer(tsFile).dump();
     }
 
     // warning: this function will modify `tsFile` in-place

@@ -64,11 +64,11 @@ await decrypter.beginDecryptSession();
 
 // 如果你获取到的是 ts 流：
 const tsBuffer: Uint8Array = ...; // 原始 ts 内容
-const decryptedTsBuffer = decrypter.decryptTsBuffer(tsBuffer);
+const decryptedTsBuffer = decrypter.decryptTsBufferUint8Array(tsBuffer);
 
 // 如果你获取到的是 NAL：
 let nal: Uint8Array = ...; // NAL
-nal = decrypter.decryptUint8Array(nal);
+nal = decrypter.decryptNALUUint8Array(nal);
 
 decrypter.endDecryptSession();
 ```
