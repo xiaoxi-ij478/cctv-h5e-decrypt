@@ -148,11 +148,10 @@ async function main(){
                 { flag: 'a' }
             );
     }
-    decrypt.endDecryptSession();
+    decrypter.endDecryptSession();
 }
 
 main();
-
 ```
 
 ## misc.
