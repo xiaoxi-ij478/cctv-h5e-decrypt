@@ -26,8 +26,8 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "rm -rf build && npx tsc && rm -f build/external/*.map && diff src/external/cctv.worker.js ~/cctv.worker.orig.js -u >src/external/cctv.worker.diff",
-    "bundle": "npx esbuild src/main.ts --sourcemap=external --bundle --platform=node --format=esm --outfile=build/final/final.js"
+    "build": "rm -rf build && npx tsc && rm -f build/external/*.map && diff src/external/cctv.worker.js src/external/cctv.worker.orig.js -u >src/external/cctv.worker.diff",
+    "bundle": "rm -rf build/final && npx esbuild src/main.ts --sourcemap=external --bundle --platform=node --format=esm --outfile=build/final/final.js && cd build/final && tar zcvf ../final.tar.gz . && zip -r ../final.zip ."
   },
   "dependencies": {
     "js-crc": "^0.3.1"
@@ -36,7 +36,8 @@
     "@types/js-crc": "^0.2.3",
     "@types/node": "^25.9.1",
     "esbuild": "^0.28.0",
-    "tsx": "^4.22.4"
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
   },
   "allowScripts": {
     "esbuild@0.28.0": true

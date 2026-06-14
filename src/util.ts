@@ -50,7 +50,7 @@ function checkNumberNotEqual(
 // arr: arrays to concat
 // toBuffer: if provided, the existing arraybuffer to append
 //    but if the provided buffer is too small, we'll allocate a new buffer
-function concatUint8Arrays(arr: Uint8Array[], toBuffer?: ArrayBuffer): Uint8Array {
+function concatUint8Arrays(arr: Uint8Array[], toBuffer?: ArrayBufferLike): Uint8Array {
     const totalLength: number = arr.reduce((a, e) => a + e.byteLength, 0);
     let reallocated: boolean = false;
 
