@@ -56,21 +56,103 @@ npx tsx <仓库路径>/src/main.ts --get-guid <码率> <视频网页链接> <解
 
 （我还没有在 npm 上发布包）
 
+这个示例程序下载命令行给定的所有视频，码率选定为 2000。
+
+（对，其实这个就是我写的 main.ts 的一个极简版）
+
 ```ts
-import * as decrypter from "cctv-h5e-decrypter";
+import * as process from "node:process";
+import * as fsPromises from "node:fs/promises";
 
-const decrypter: decrypter.Decrypter = new decrypter.Decrypter;
-await decrypter.beginDecryptSession();
+import * as decrypt from "cctv-h5e-decrypt";
 
-// 如果你获取到的是 ts 流：
-const tsBuffer: Uint8Array = ...; // 原始 ts 内容
-const decryptedTsBuffer = decrypter.decryptTsBufferUint8Array(tsBuffer);
+async function getURLAsUint8Array(url) {
+    const response = await fetch(url);
+    if (!response.ok)
+        throw new Error(`URL returned error: ${response.status} ${response.statusText}`);
 
-// 如果你获取到的是 NAL：
-let nal: Uint8Array = ...; // NAL
-nal = decrypter.decryptNALUUint8Array(nal);
+    return new Uint8Array(await response.arrayBuffer());
+}
 
-decrypter.endDecryptSession();
+async function getURLAsText(url){
+    const response = await fetch(url);
+    if (!response.ok)
+        throw new Error(`URL returned error: ${response.status} ${response.statusText}`);
+
+    return await response.text();
+}
+
+async function getURLAsJSON(url){
+    const response = await fetch(url);
+    if (!response.ok)
+        throw new Error(`URL returned error: ${response.status} ${response.statusText}`);
+
+    return await response.json();
+}
+
+async function getM3U8FromWebPage(url, resolution) {
+    if (!Number.isInteger(resolution))
+        throw new Error("resolution not integer");
+
+    console.log(`decrypting from video page link "${url}" with resolution "${resolution}"...`);
+    const webpageContent = await getURLAsText(url);
+    let guid;
+    for (const line of webpageContent.split("\n")) {
+        if (!line.match(/var (?:video_)?guid\s*=/))
+            continue;
+
+        guid = line.replace(/.*(["'])(.*)\1.*/, "$2");
+        break;
+    }
+
+    if (!guid)
+        throw new Error("no guid found in webpage provided");
+
+    console.log(`got guid ${guid}`);
+    const videoInfo =
+        await getURLAsJSON(`https://vdn.apps.cntv.cn/api/getHttpVideoInfo.do?pid=${guid}`);
+
+    if (videoInfo.ack === "no")
+        throw new Error(`invalid guid ${guid}`);
+
+    const ret = videoInfo.manifest.hls_h5e_url.replace(/main/g, resolution.toString()).replace(/\?.*/, "");
+    console.log(`got link "${ret}"`);
+    return ret;
+}
+
+async function *getTsFromM3U8(url) {
+    console.log(`decrypting from m3u8 direct link "${url}"...`);
+    const m3u8Content = await getURLAsText(url);
+    const buffers = [];
+
+    for (const line of m3u8Content.split("\n")) {
+        if (!line || line.match(/^#/))
+            continue;
+
+        console.log(`decrypting slice "${line}"...`);
+        yield await getURLAsUint8Array(new URL(line, url));
+    }
+
+    console.log("done");
+}
+
+async function main(){
+    const decrypter = new decrypt.Decrypter;
+
+    await decrypter.beginDecryptSession();
+    for (const url of process.argv.slice(2)) {
+        for await (const tsBuffer of getTsFromM3U8(await getM3U8FromWebPage(url, 2000)))
+            await fsPromises.writeFile(
+                `${new URL(url).toString().split('/').at(-1)}.ts`,
+                decrypter.decryptTsBufferUint8Array(tsBuffer),
+                { flag: 'a' }
+            );
+    }
+    decrypt.endDecryptSession();
+}
+
+main();
+
 ```
 
 ## misc.

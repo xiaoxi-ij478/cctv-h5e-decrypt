@@ -7,7 +7,6 @@ import * as process from "node:process";
 
 import * as decrypt from "./decrypt.js";
 import * as util from "./util.js";
-import * as mpegts from "./mpegts.js";
 
 let noLog: boolean = false;
 
@@ -51,17 +50,17 @@ async function getM3U8FromWebPage(url: string, resolution: number): Promise<stri
     if (!guid)
         throw new Error("no guid found in webpage provided");
 
-    cmdutil.log(`got guid ${guid}`);
+    cmdutil.log(`got guid "${guid}"`);
     type VideoInfoType = { manifest: { hls_h5e_url: string }, ack: string };
     const videoInfo: VideoInfoType =
         await util.getURLAsJSON(`https://vdn.apps.cntv.cn/api/getHttpVideoInfo.do?pid=${guid}`) as VideoInfoType;
 
     if (videoInfo.ack === "no")
-        throw new Error(`invalid guid ${guid}`);
+        throw new Error(`invalid guid "${guid}"`);
 
     const ret: string = videoInfo.manifest.hls_h5e_url.replace(/main/g, resolution.toString()).replace(/\?.*/, "");
     cmdutil.log(`got link "${ret}"`);
-    return ret
+    return ret;
 }
 
 async function *getTsFromM3U8(url: string): AsyncGenerator<Uint8Array> {
@@ -118,14 +117,14 @@ async function main(): Promise<void> {
         for await (const tsBuffer of getTsFromM3U8(process.argv[2]))
             await fsPromises.writeFile(
                 process.argv[3],
-                decrypter.decryptTsBuffer(new mpegts.MPEGTS(tsBuffer)).dump(),
+                decrypter.decryptTsBufferUint8Array(tsBuffer),
                 { flag: 'a' }
             );
     } else if (getGUID) {
         for await (const tsBuffer of getTsFromM3U8(await getM3U8FromWebPage(process.argv[2], guidResolution)))
             await fsPromises.writeFile(
                 process.argv[3],
-                decrypter.decryptTsBuffer(new mpegts.MPEGTS(tsBuffer)).dump(),
+                decrypter.decryptTsBufferUint8Array(tsBuffer),
                 { flag: 'a' }
             );
     } else {
@@ -134,7 +133,7 @@ async function main(): Promise<void> {
 
         await fsPromises.writeFile(
             process.argv[3],
-            decrypter.decryptTsBuffer(new mpegts.MPEGTS(Uint8Array.from(tsBuffer))).dump(),
+            decrypter.decryptTsBufferUint8Array(Uint8Array.from(tsBuffer)),
             { flag: 'a' }
         );
     }

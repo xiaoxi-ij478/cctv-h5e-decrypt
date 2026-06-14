@@ -83,7 +83,7 @@ class Decrypter {
     }
 
     // warning: this function will modify `data` in-place
-    decryptNALU(data: nalutil.NALU): nalutil.NALU {
+    protected decryptNALU(data: nalutil.NALU): nalutil.NALU {
         if (!this.sessionBegin)
             throw new Error("session not started yet");
 
@@ -190,7 +190,7 @@ class Decrypter {
     }
 
     // warning: this function will modify `tsFile` in-place
-    decryptTsBuffer(tsFile: mpegts.MPEGTS): mpegts.MPEGTS {
+    protected decryptTsBuffer(tsFile: mpegts.MPEGTS): mpegts.MPEGTS {
         let videoStreamPID: number = -1;
 /*
         // assume there's just one PMT
