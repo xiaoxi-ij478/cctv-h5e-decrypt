@@ -121,8 +121,7 @@ async function main(): Promise<void> {
                 decrypter.decryptTsBuffer(new mpegts.MPEGTS(tsBuffer)).dump(),
                 { flag: 'a' }
             );
-    }
-    else if (getGUID) {
+    } else if (getGUID) {
         for await (const tsBuffer of getTsFromM3U8(await getM3U8FromWebPage(process.argv[2], guidResolution)))
             await fsPromises.writeFile(
                 process.argv[3],

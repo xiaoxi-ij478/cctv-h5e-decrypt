@@ -16,7 +16,7 @@ class Decrypter {
     private sessionBegin: boolean = false;
     private loadFinished: Promise<void>;
 
-    private static readonly pageHost: string = "https://www.12371.cn";
+    private static readonly pageHost: string = "https://tv.cctv.com";
     private static readonly mediaTagID: string = "player_container_player";
     private static readonly MemoryExtend: number = 2048;
 
