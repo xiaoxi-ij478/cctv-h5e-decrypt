@@ -43,7 +43,7 @@ async function getM3U8FromWebPage(url: string, resolution: number): Promise<stri
         if (!line.match(/var (?:video_)?guid\s*=/))
             continue;
 
-        guid = line.replace(/.*(["'])(.*)\1.*/, "$2");
+        guid = line.replace(/.*(["'])(.*)\1.*/, "$2").replace(/[\r\n]/g, "");
         break;
     }
 
