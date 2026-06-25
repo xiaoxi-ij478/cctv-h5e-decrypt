@@ -4,6 +4,7 @@ import * as jsCrc from "js-crc";
 import * as jsCrcModels from "js-crc/models";
 
 import * as util from "./util.js";
+import * as cmdutil from "./cmdutil.js";
 
 export {
     MPEGTSPacketBase,
@@ -57,17 +58,14 @@ class MPEGTSPacketHeader extends MPEGTSPacketBase {
     }
 
     protected init(data: Uint8Array): void {
-        if (!disableIntegrityCheck) {
-            util.checkNumberEqual(data[0], 0x47, "sync byte error", true);
-            util.checkNumberNotEqual(data[1] >> 7, 1, "error indicator set", true);
-        }
+        util.checkNumberEqual(data[0], 0x47, "sync byte error", !disableIntegrityCheck);
+        util.checkNumberNotEqual(data[1] >> 7, 1, "error indicator set", !disableIntegrityCheck);
 
         this.isContinuePacket = !(data[1] >> 6 & 0x1);
         this.transportPriority = data[1] >> 5 & 0x1;
         this.pid = (data[1] & 0x1F) << 8 | data[2];
 
-        if (!disableIntegrityCheck)
-            util.checkNumberNotEqual(data[3] >> 4 & 0x3, 0, "adaptation field control field === 0");
+        util.checkNumberNotEqual(data[3] >> 4 & 0x3, 0, "adaptation field control field === 0", !disableIntegrityCheck);
 
         this.hasAdaptationControl = Boolean(data[3] >> 5 & 0x1);
         this.hasPayload = Boolean(data[3] >> 4 & 0x1);
@@ -142,9 +140,8 @@ class MPEGTSPacket extends MPEGTSPacketBase {
     }
 
     protected init(data: Uint8Array): void {
-        if (!disableIntegrityCheck)
-            if (data.length !== 188) {
-                console.warn("this MPEG TS Packet has trailing garbage, will discard them");
+        if (!disableIntegrityCheck && data.length !== 188) {
+                cmdutil.warn("this MPEG TS Packet has trailing garbage, will discard them");
                 data = data.subarray(0, 188);
             }
 
@@ -195,8 +192,7 @@ abstract class MPEGTSPESPacketBase {
     protected abstract realDump(): Uint8Array;
 
     protected init(data: MPEGTSPacket): void {
-        if (!disableIntegrityCheck)
-            if (data.header.isContinuePacket)
+        if (!disableIntegrityCheck && data.header.isContinuePacket)
                 throw new Error("MPEGTSPESPacketBase init() expects an initial packet");
 
         this.currentCounter = data.header.continuityCount;
@@ -208,8 +204,7 @@ abstract class MPEGTSPESPacketBase {
         this.initialized = true;
         this.buffer = data.payload!;
 
-        if (!disableIntegrityCheck)
-            if (this.buffer.length < this.requiredBytes)
+        if (!disableIntegrityCheck && this.buffer.length < this.requiredBytes)
                 throw new Error("payload length less than required " + this.requiredBytes + " bytes");
 
         this.realInit();
@@ -234,15 +229,24 @@ abstract class MPEGTSPESPacketBase {
         if (this.complete)
             throw new Error("Can't update a complete packet");
 
-        if (!disableIntegrityCheck)
-            if (!data.header.isContinuePacket)
+        if (!disableIntegrityCheck && !data.header.isContinuePacket)
                 throw new Error("update() expects a continue packet");
 
         this.currentCounter++;
         this.currentCounter &= 0xF;
 
-        util.checkNumberEqual(data.header.pid, this.pid, "provided packet's pid do not match that of this pes", true);
-        util.checkNumberEqual(data.header.continuityCount, this.currentCounter, "continuity count mismatch", true);
+        util.checkNumberEqual(
+            data.header.pid,
+            this.pid,
+            "provided packet's pid do not match that of this pes",
+            !disableIntegrityCheck
+        );
+        util.checkNumberEqual(
+            data.header.continuityCount,
+            this.currentCounter,
+            "continuity count mismatch",
+            !disableIntegrityCheck
+        );
 
         if (!data.header.hasPayload)
             return false;
@@ -273,8 +277,7 @@ abstract class MPEGTSPSIPacketBase extends MPEGTSPESPacketBase {
     protected additionalData: Uint8Array = new Uint8Array;
 
     protected init(data: MPEGTSPacket): void {
-        if (!disableIntegrityCheck)
-            if (data.header.isContinuePacket)
+        if (!disableIntegrityCheck && data.header.isContinuePacket)
                 throw new Error("MPEGTSPSIPacketBase init() expects an initial packet");
 
         this.initialized = true;
@@ -286,8 +289,7 @@ abstract class MPEGTSPSIPacketBase extends MPEGTSPESPacketBase {
             this.buffer = data.payload!.subarray(data.payload![0] + 1);
         }
 
-        if (!disableIntegrityCheck)
-            if (this.buffer.length < this.requiredBytes)
+        if (!disableIntegrityCheck && this.buffer.length < this.requiredBytes)
                 throw new Error("payload length less than required " + this.requiredBytes + " bytes");
 
         this.realInit();
@@ -330,12 +332,10 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
     }
 
     protected realInit(): void {
-        if (!disableIntegrityCheck) {
-            util.checkNumberEqual(this.buffer[0], 0, "table id not 0", true);
-            util.checkNumberEqual(this.buffer[1] >> 7, 1, "section syntax indicator not 1", true);
-            util.checkNumberEqual(this.buffer[1] >> 6 & 0x1, 0, "zero not 0", true);
-            util.checkNumberEqual(this.buffer[1] >> 4 & 0x3, 3, "reserved not 3", true);
-        }
+        util.checkNumberEqual(this.buffer[0], 0, "table id not 0", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[1] >> 7, 1, "section syntax indicator not 1", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[1] >> 6 & 0x1, 0, "zero not 0", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[1] >> 4 & 0x3, 3, "reserved not 3", !disableIntegrityCheck);
 
         // the remaining length also counts the header and CRC
         this.remainingLength = (this.buffer[1] & 0xF) << 8 | this.buffer[2];
@@ -346,13 +346,11 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
 
         this.transportStreamID = this.buffer[3] << 8 | this.buffer[4];
 
-        if (!disableIntegrityCheck) {
-            util.checkNumberEqual(this.buffer[5] >> 6, 3, "reserved2 not 3", true);
-            util.checkNumberEqual(this.buffer[5] >> 1 & 0x1F, 0, "version not 0", true);
-            util.checkNumberEqual(this.buffer[5] & 0x1, 1, "current next indicator not 1", true);
-            util.checkNumberEqual(this.buffer[6], 0, "section number not 0", true);
-            util.checkNumberEqual(this.buffer[7], 0, "last section number not 0", true);
-        }
+        util.checkNumberEqual(this.buffer[5] >> 6, 3, "reserved2 not 3", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[5] >> 1 & 0x1F, 0, "version not 0", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[5] & 0x1, 1, "current next indicator not 1", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[6], 0, "section number not 0", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[7], 0, "last section number not 0", !disableIntegrityCheck);
 
         this.crc32obj.update(this.buffer.subarray(0, 8 /* total header length */));
         this.buffer = this.buffer.subarray(8);
@@ -369,8 +367,7 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
 
     protected realUpdate(): boolean {
         for (; this.remainingLength > 4 && this.buffer.length >= 4; this.remainingLength -= 4) {
-            if (!disableIntegrityCheck)
-                util.checkNumberEqual(this.buffer[2] >> 5, 7, "reserved3 not 7", false);
+            util.checkNumberEqual(this.buffer[2] >> 5, 7, "reserved3 not 7", !disableIntegrityCheck);
 
             this.programPMTPIDMapping.push({
                 program: this.buffer[0] << 8 | this.buffer[1],
@@ -462,12 +459,10 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
     }
 
     protected realInit(): void {
-        if (!disableIntegrityCheck) {
-            util.checkNumberEqual(this.buffer[0], 2, "table id not 2", true);
-            util.checkNumberEqual(this.buffer[1] >> 7, 1, "section syntax indicator not 1", true);
-            util.checkNumberEqual(this.buffer[1] >> 6 & 0x1, 0, "zero not 0", true);
-            util.checkNumberEqual(this.buffer[1] >> 4 & 0x3, 3, "reserved not 3", true);
-        }
+        util.checkNumberEqual(this.buffer[0], 2, "table id not 2", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[1] >> 7, 1, "section syntax indicator not 1", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[1] >> 6 & 0x1, 0, "zero not 0", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[1] >> 4 & 0x3, 3, "reserved not 3", !disableIntegrityCheck);
 
         this.remainingLength = (this.buffer[1] & 0xF) << 8 | this.buffer[2];
         if (!disableIntegrityCheck && this.remainingLength > 0x3FD)
@@ -475,19 +470,16 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
 
         this.assocProgram = this.buffer[3] << 8 | this.buffer[4];
 
-        if (!disableIntegrityCheck) {
-            util.checkNumberEqual(this.buffer[5] >> 6, 3, "reserved2 not 3", true);
-            util.checkNumberEqual(this.buffer[5] >> 1 & 0x1F, 0, "version not 0", true);
-            util.checkNumberEqual(this.buffer[5] & 0x1, 1, "current next indicator not 1", true);
-            util.checkNumberEqual(this.buffer[6], 0, "section number not 0", true);
-            util.checkNumberEqual(this.buffer[7], 0, "last section number not 0", true);
-            util.checkNumberEqual(this.buffer[8] >> 5, 7, "reserved3 not 7", true);
-        }
+        util.checkNumberEqual(this.buffer[5] >> 6, 3, "reserved2 not 3", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[5] >> 1 & 0x1F, 0, "version not 0", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[5] & 0x1, 1, "current next indicator not 1", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[6], 0, "section number not 0", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[7], 0, "last section number not 0", !disableIntegrityCheck);
+        util.checkNumberEqual(this.buffer[8] >> 5, 7, "reserved3 not 7", !disableIntegrityCheck);
 
         this.pcrpid = (this.buffer[8] & 0x1F) << 8 | this.buffer[9];
 
-        if (!disableIntegrityCheck)
-            util.checkNumberEqual(this.buffer[10] >> 4, 15, "reserved4 not 15", true);
+        util.checkNumberEqual(this.buffer[10] >> 4, 15, "reserved4 not 15", !disableIntegrityCheck);
 
         const descriptorLength = (this.buffer[10] & 0xF) << 8 | this.buffer[11];
         this.descriptor = this.buffer.subarray(12, descriptorLength + 12);
@@ -516,10 +508,8 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
             if (5 + descriptorLength > this.buffer.length)
                 break;
 
-            if (!disableIntegrityCheck) {
-                util.checkNumberEqual(this.buffer[1] >> 5, 7, "reserved not 7", true);
-                util.checkNumberEqual(this.buffer[3] >> 4, 15, "reserved2 not 15", true);
-            }
+            util.checkNumberEqual(this.buffer[1] >> 5, 7, "reserved not 7", !disableIntegrityCheck);
+            util.checkNumberEqual(this.buffer[3] >> 4, 15, "reserved2 not 15", !disableIntegrityCheck);
 
             this.streams.push({
                 streamType: this.buffer[0],
@@ -634,8 +624,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
 
         // we only analyze deeper for video/audio streams
         if (this.streamID >> 5 === 6 || this.streamID >> 4 === 14) {
-            if (!disableIntegrityCheck)
-                util.checkNumberEqual(this.buffer[0] >> 6, 2, "start two bits not 2", true);
+            util.checkNumberEqual(this.buffer[0] >> 6, 2, "start two bits not 2", !disableIntegrityCheck);
 /*
             switch (this.buffer[1] >> 6) {
                 case 3:
@@ -643,7 +632,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
                     break;
 
                 case 2:
-                    // console.warn("this PES has no DTS information");
+                    // cmdutil.warn("this PES has no DTS information");
                     this.hasPTS = true;
                     break;
 
@@ -652,7 +641,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
                         throw new Error("PTS DTS flags value 1 is forbidden");
 
                 case 0:
-                    // console.warn("this PES has no PTS and DTS information");
+                    // cmdutil.warn("this PES has no PTS and DTS information");
                     break;
             }
 

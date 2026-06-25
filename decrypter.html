@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title> CCTV h5e Decrypter </title>
+        <meta charset="utf-8"/>
+        <style>
+            .nodisplay {
+                display: none;
+            }
+        </style>
+        <script type="module">
+            import * as decryptLib from "./build/final-web/final-web.js";
+
+            decryptLib.cmdutil.setLogFunc((type, content) => {
+                const p = document.createElement("p");
+                switch (type) {
+                    case decryptLib.cmdutil.LogType.DEBUG:
+                        // alert(content);
+                        p.remove();
+                        return; // NOTE!
+
+                    case decryptLib.cmdutil.LogType.LOG:
+                        p.append(`提示：${content}`);
+                        break;
+
+                    case decryptLib.cmdutil.LogType.WARN:
+                        p.append(`警告：${content}`);
+                        break;
+
+                    case decryptLib.cmdutil.LogType.ERROR:
+                        p.append(`错误：${content}`);
+                        break;
+                }
+                document.getElementById("logs").append(p);
+            });
+
+            const inputFile = document.getElementById("input-file");
+            const inputURL = document.getElementById("input-url");
+            document.getElementById("form").addEventListener("submit", async function(e) {
+                e.preventDefault();
+                for (const i of Array.from(document.getElementById("logs").children))
+                    i.remove();
+
+                const file = inputFile.files[0];
+                const url = inputURL.value;
+                let newBuffer, resolution;
+
+                if (!file && !url) {
+                    alert("必须指定文件或者 URL！");
+                    return;
+                }
+
+                try {
+                    if (url) {
+                        resolution = Number(new FormData(document.getElementById("form")).get("resolution"));
+                        newBuffer = await decryptLib.decryptURL(url, resolution);
+                    } else
+                        newBuffer = await decryptLib.decryptBuffer(await file.bytes());
+
+                } catch (e) {
+                    document.getElementById("failure").classList.remove("nodisplay");
+                    document.getElementById("success").classList.add("nodisplay");
+                    document.getElementById("failure").textContent = e;
+                    return;
+                }
+
+                const newURL = URL.createObjectURL(new Blob(newBuffer));
+                document.getElementById("success").classList.remove("nodisplay");
+                document.getElementById("failure").classList.add("nodisplay");
+                document.getElementById("success-file-link").href = newURL;
+            });
+        </script>
+    </head>
+
+    <body>
+        <h1> CCTV h5e 解密器 </h1>
+
+        <article>
+            <form id="form">
+                <section>
+                    <label for="input-file">选择一个要解密的文件：</label>
+                    <input type="file" name="input-file" id="input-file" />
+                </section>
+                <hr/>
+
+                <section>
+                    <label for="input-url">或输入要解密的视频所在网页的 URL（也就是 tv.cctv.com/xxx 而不是 2000.m3u8）：</label>
+                    <input type="url" name="input-url" id="input-url" placeholder="https://tv.cctv.com/xxx" />
+                </section>
+                <section>
+                    <div><label>以及清晰度：</label></div>
+
+                    <div>
+                        <label for="resolution450">450</label>
+                        <input type="radio" id="resolution450" name="resolution" value="450"/>
+                    </div>
+                    <div>
+                        <label for="resolution850">850</label>
+                        <input type="radio" id="resolution850" name="resolution" value="850"/>
+                    </div>
+                    <div>
+                        <label for="resolution1200">1200</label>
+                        <input type="radio" id="resolution1200" name="resolution" value="1200"/>
+                    </div>
+                    <div>
+                        <label for="resolution2000">2000</label>
+                        <input type="radio" id="resolution2000" name="resolution" value="2000" checked/>
+                    </div>
+                    <div>
+                        <label for="resolution4000">4000</label>
+                        <input type="radio" id="resolution4000" name="resolution" value="4000"/>
+                    </div>
+                </section>
+                <section>
+                    <label>（如果同时指定了两者，那么将使用 URL）</label>
+                </section>
+                <hr/>
+                <section>
+                    <button id="start-decrypt">开始解密</button>
+                </section>
+            </form>
+
+            <h2>日志：</h2>
+            <section id="logs">
+            </section>
+            <section id="success" class="nodisplay">文件解密成功。<a id="success-file-link">点击下载</a></section>
+            <section id="failure" class="nodisplay">文件解密失败。原因：<span id="failure-reason"></span></section>
+        </article>
+    </body>
+</html>

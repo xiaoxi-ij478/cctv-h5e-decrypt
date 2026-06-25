@@ -1,65 +1,82 @@
---- src/external/cctv.worker.js	2026-06-11 20:20:36.374259245 +0800
-+++ src/external/cctv.worker.orig.js	2026-06-14 23:17:34.927179747 +0800
-@@ -1,58 +1,7 @@
+--- src/external/cctv.worker.js	2026-06-25 14:07:43.110224540 +0800
++++ src/external/cctv.worker.orig.js	2026-06-14 16:50:30.241110815 +0800
+@@ -1,75 +1,7 @@
  /* 2026-05-12 18:20:40  4f63a66bf8e9c0c825f898b5c1015373 */
  console.debug('CCTV_Woker_BTime', '2026-05-12 18:20:40');
 -export { CNTVModule };
  var CNTVModule = function() {
          var _scriptDir = "undefined" != typeof document && document.currentScript ? document.currentScript.src : void 0;
 -
--        if (typeof XMLHttpRequest === "undefined" && ("object" == typeof process && "object" == typeof process.versions && "string" == typeof process.versions.node))
--            // a very simple xhr implementation to fit the need of __emscripten_fetch_xhr()
--            globalThis.XMLHttpRequest = class {
--                #url;
--                #method;
--                onload;
--                onreadystatechange;
--                onerror;
--                response;
--                status = 0;
--                statusText = "";
--                readyState = 0;
+-        // a very simple xhr implementation to fit the need of __emscripten_fetch_xhr()
+-        globalThis.XMLHttpRequest = class {
+-            #url;
+-            #method;
+-            #resolveFunc;
+-            onload;
+-            onreadystatechange;
+-            onerror;
+-            response;
+-            status = 0;
+-            statusText = "";
+-            readyState = 0;
 -
--                open(method, url, async = true) {
--                    this.#url = url;
--                    this.#method = method;
+-            open(method, url, async = true) {
+-                this.#url = url;
+-                this.#method = method;
+-                if (this.#url === "https://tv.cctv.com/Library/H5player.json")
+-                    this.#resolveFunc = this.#resolveH5PlayerJSON;
+-                else
+-                    this.#resolveFunc = fetch;
 -
--                    if (!async) // let's hope not so
--                        throw new Error("not supported");
+-                if (!async) // let's hope not so
+-                    throw new Error("not supported");
 -
--                    this.readyState = 1;
+-                this.readyState = 1;
+-                this.onreadystatechange?.();
+-            }
+-
+-            async #resolveH5PlayerJSON() {
+-                // Blob has an interface similar to Response
+-                return new Blob([
+-                    JSON.stringify({
+-                        h5player: {
+-                            ver: 20190904,
+-                            md5: "c7ed5a71dbe4dee1a2ba171f660ee98d",
+-                            BTime: "2019-09-04-20:25:10"
+-                        }
+-                    })
+-                ]);
+-            }
+-
+-            send(body) {
+-                this.#resolveFunc(
+-                    this.#url,
+-                    { body, method: this.#method }
+-                ).then(resp => {
+-                    this.readyState = 4;
+-                    this.status = resp.status;
+-                    this.statusText = resp.statusText;
+-
+-                    if (!resp.ok)
+-                        throw new Error;
+-
+-                    return resp.arrayBuffer();
+-                }).then(abuffer => {
+-                    this.response = abuffer;
+-
+-                    this.onload?.();
 -                    this.onreadystatechange?.();
--                }
--
--                send(body) {
--                    fetch(
--                        this.#url,
--                        { body, method: this.#method }
--                    ).then(resp => {
--                        this.readyState = 4;
--                        this.status = resp.status;
--                        this.statusText = resp.statusText;
--
--                        if (!resp.ok)
--                            throw new Error;
--
--                        return resp.arrayBuffer();
--                    }).then(abuffer => {
--                        this.response = abuffer;
--
--                        this.onload?.();
--                        this.onreadystatechange?.();
--                    }).catch(err => {
--                        this.onerror?.();
--                        this.onreadystatechange?.();
--                    });
--                }
--            };
+-                }).catch(err => {
+-                    this.onerror?.();
+-                    this.onreadystatechange?.();
+-                });
+-            }
+-        };
 -
          return function(CNTVModule) {
              CNTVModule = CNTVModule || {};
              var Module = void 0 !== CNTVModule ? CNTVModule : {},
-@@ -455,22 +404,8 @@
+@@ -472,22 +404,8 @@
              };
              var ASM_CONSTS = [function($0) {
                  function theAnswer(thearg) {
@@ -83,7 +100,7 @@
                          b = lengthBytesUTF8(a) + 1,
                          c = _malloc(b);
                      return stringToUTF8(a, c, b), c
-@@ -2778,22 +2713,7 @@
+@@ -2795,22 +2713,7 @@
              }
  
              function emval_get_global() {
@@ -107,7 +124,7 @@
              }
  
              function __emval_get_global(A) {
-@@ -2884,7 +2804,7 @@
+@@ -2901,7 +2804,7 @@
              }
  
              function _emscripten_get_callstack(A, e, t) {
@@ -116,7 +133,7 @@
                  return !e || t <= 0 ? lengthBytesUTF8(A) + 1 : stringToUTF8(A, e, t) + 1
              }
  
-@@ -3245,9 +3165,6 @@
+@@ -3262,9 +3165,6 @@
                      w = !!(4 & c),
                      u = !!(32 & c),
                      c = !!(16 & c);

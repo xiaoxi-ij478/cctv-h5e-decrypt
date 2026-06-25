@@ -4,54 +4,71 @@ export { CNTVModule };
 var CNTVModule = function() {
         var _scriptDir = "undefined" != typeof document && document.currentScript ? document.currentScript.src : void 0;
 
-        if (typeof XMLHttpRequest === "undefined" && ("object" == typeof process && "object" == typeof process.versions && "string" == typeof process.versions.node))
-            // a very simple xhr implementation to fit the need of __emscripten_fetch_xhr()
-            globalThis.XMLHttpRequest = class {
-                #url;
-                #method;
-                onload;
-                onreadystatechange;
-                onerror;
-                response;
-                status = 0;
-                statusText = "";
-                readyState = 0;
+        // a very simple xhr implementation to fit the need of __emscripten_fetch_xhr()
+        globalThis.XMLHttpRequest = class {
+            #url;
+            #method;
+            #resolveFunc;
+            onload;
+            onreadystatechange;
+            onerror;
+            response;
+            status = 0;
+            statusText = "";
+            readyState = 0;
 
-                open(method, url, async = true) {
-                    this.#url = url;
-                    this.#method = method;
+            open(method, url, async = true) {
+                this.#url = url;
+                this.#method = method;
+                if (this.#url === "https://tv.cctv.com/Library/H5player.json")
+                    this.#resolveFunc = this.#resolveH5PlayerJSON;
+                else
+                    this.#resolveFunc = fetch;
 
-                    if (!async) // let's hope not so
-                        throw new Error("not supported");
+                if (!async) // let's hope not so
+                    throw new Error("not supported");
 
-                    this.readyState = 1;
+                this.readyState = 1;
+                this.onreadystatechange?.();
+            }
+
+            async #resolveH5PlayerJSON() {
+                // Blob has an interface similar to Response
+                return new Blob([
+                    JSON.stringify({
+                        h5player: {
+                            ver: 20190904,
+                            md5: "c7ed5a71dbe4dee1a2ba171f660ee98d",
+                            BTime: "2019-09-04-20:25:10"
+                        }
+                    })
+                ]);
+            }
+
+            send(body) {
+                this.#resolveFunc(
+                    this.#url,
+                    { body, method: this.#method }
+                ).then(resp => {
+                    this.readyState = 4;
+                    this.status = resp.status;
+                    this.statusText = resp.statusText;
+
+                    if (!resp.ok)
+                        throw new Error;
+
+                    return resp.arrayBuffer();
+                }).then(abuffer => {
+                    this.response = abuffer;
+
+                    this.onload?.();
                     this.onreadystatechange?.();
-                }
-
-                send(body) {
-                    fetch(
-                        this.#url,
-                        { body, method: this.#method }
-                    ).then(resp => {
-                        this.readyState = 4;
-                        this.status = resp.status;
-                        this.statusText = resp.statusText;
-
-                        if (!resp.ok)
-                            throw new Error;
-
-                        return resp.arrayBuffer();
-                    }).then(abuffer => {
-                        this.response = abuffer;
-
-                        this.onload?.();
-                        this.onreadystatechange?.();
-                    }).catch(err => {
-                        this.onerror?.();
-                        this.onreadystatechange?.();
-                    });
-                }
-            };
+                }).catch(err => {
+                    this.onerror?.();
+                    this.onreadystatechange?.();
+                });
+            }
+        };
 
         return function(CNTVModule) {
             CNTVModule = CNTVModule || {};

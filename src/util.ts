@@ -1,5 +1,7 @@
 "use strict";
 
+import * as cmdutil from "./cmdutil.js";
+
 export {
     arrayEquals,
     checkNumberEqual,
@@ -8,7 +10,9 @@ export {
     appendUint8Array,
     getURLAsUint8Array,
     getURLAsJSON,
-    getURLAsText
+    getURLAsText,
+    getM3U8FromWebPage,
+    getTsFromM3U8
 };
 
 function arrayEquals(a: Uint8Array, b: Uint8Array): boolean {
@@ -28,7 +32,7 @@ function checkNumberEqual(
         if (raiseError)
             throw new Error(errorMsg);
         else
-            console.warn(errorMsg);
+            cmdutil.warn(errorMsg);
     }
 }
 
@@ -42,7 +46,7 @@ function checkNumberNotEqual(
         if (raiseError)
             throw new Error(errorMsg);
         else
-            console.warn(errorMsg);
+            cmdutil.warn(errorMsg);
     }
 }
 
@@ -106,4 +110,51 @@ async function getURLAsJSON(url: string | URL): Promise<object> {
         throw new Error(`URL returned error: ${response.status} ${response.statusText}`);
 
     return await response.json();
+}
+
+async function getM3U8FromWebPage(url: string, resolution: number): Promise<string> {
+    if (!Number.isInteger(resolution))
+        throw new Error("resolution not integer");
+
+    cmdutil.log(`decrypting from video page link "${url}" with resolution "${resolution}"...`);
+    const webpageContent: string = await getURLAsText(url);
+    let guid: string | undefined;
+    for (const line of webpageContent.split("\n")) {
+        if (!line.match(/var (?:video_)?guid\s*=/))
+            continue;
+
+        guid = line.replace(/.*(["'])(.*)\1.*/, "$2");
+        break;
+    }
+
+    if (!guid)
+        throw new Error("no guid found in webpage provided");
+
+    cmdutil.log(`got guid "${guid}"`);
+    type VideoInfoType = { manifest: { hls_h5e_url: string }, ack: string };
+    const videoInfo: VideoInfoType =
+        await getURLAsJSON(`https://vdn.apps.cntv.cn/api/getHttpVideoInfo.do?pid=${guid}`) as VideoInfoType;
+
+    if (videoInfo.ack === "no")
+        throw new Error(`invalid guid "${guid}"`);
+
+    const ret: string = videoInfo.manifest.hls_h5e_url.replace(/main/g, resolution.toString()).replace(/\?.*/, "");
+    cmdutil.log(`got link "${ret}"`);
+    return ret;
+}
+
+async function *getTsFromM3U8(url: string): AsyncGenerator<Uint8Array> {
+    cmdutil.log(`decrypting from m3u8 direct link "${url}"...`);
+    const m3u8Content: string = await getURLAsText(url);
+    const buffers: Uint8Array[] = [];
+
+    for (const line of m3u8Content.split("\n")) {
+        if (!line || line.match(/^#/))
+            continue;
+
+        cmdutil.log(`decrypting slice "${line}"...`);
+        yield await getURLAsUint8Array(new URL(line, url));
+    }
+
+    cmdutil.log("done");
 }
