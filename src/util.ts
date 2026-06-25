@@ -12,6 +12,7 @@ export {
     getURLAsJSON,
     getURLAsText,
     getM3U8FromWebPage,
+    getM3U8FromGUID,
     getTsFromM3U8
 };
 
@@ -88,36 +89,36 @@ function appendUint8Array(dst: Uint8Array, src: Uint8Array): Uint8Array {
     return concatUint8Arrays([dst, src], dst.buffer);
 }
 
-async function getURLAsUint8Array(url: string | URL): Promise<Uint8Array> {
-    const response = await fetch(url);
+async function getURLAsUint8Array(url: string | URL, fetchOptions?: RequestInit): Promise<Uint8Array> {
+    const response = await fetch(url, fetchOptions);
     if (!response.ok)
         throw new Error(`URL returned error: ${response.status} ${response.statusText}`);
 
     return new Uint8Array(await response.arrayBuffer());
 }
 
-async function getURLAsText(url: string | URL): Promise<string> {
-    const response = await fetch(url);
+async function getURLAsText(url: string | URL, fetchOptions?: RequestInit): Promise<string> {
+    const response = await fetch(url, fetchOptions);
     if (!response.ok)
         throw new Error(`URL returned error: ${response.status} ${response.statusText}`);
 
     return await response.text();
 }
 
-async function getURLAsJSON(url: string | URL): Promise<object> {
-    const response = await fetch(url);
+async function getURLAsJSON(url: string | URL, fetchOptions?: RequestInit): Promise<object> {
+    const response = await fetch(url, fetchOptions);
     if (!response.ok)
         throw new Error(`URL returned error: ${response.status} ${response.statusText}`);
 
     return await response.json();
 }
 
-async function getM3U8FromWebPage(url: string, resolution: number): Promise<string> {
+async function getM3U8FromWebPage(url: string, resolution: number, fetchOptions?: RequestInit): Promise<string> {
     if (!Number.isInteger(resolution))
         throw new Error("resolution not integer");
 
     cmdutil.log(`decrypting from video page link "${url}" with resolution "${resolution}"...`);
-    const webpageContent: string = await getURLAsText(url);
+    const webpageContent: string = await getURLAsText(url, fetchOptions);
     let guid: string | undefined;
     for (const line of webpageContent.split("\n")) {
         if (!line.match(/var (?:video_)?guid\s*=/))
@@ -130,10 +131,19 @@ async function getM3U8FromWebPage(url: string, resolution: number): Promise<stri
     if (!guid)
         throw new Error("no guid found in webpage provided");
 
+    return await getM3U8FromGUID(guid, resolution, fetchOptions);
+}
+
+async function getM3U8FromGUID(guid: string, resolution: number, fetchOptions?: RequestInit): Promise<string> {
+    if (!Number.isInteger(resolution))
+        throw new Error("resolution not integer");
+
     cmdutil.log(`got guid "${guid}"`);
     type VideoInfoType = { manifest: { hls_h5e_url: string }, ack: string };
-    const videoInfo: VideoInfoType =
-        await getURLAsJSON(`https://vdn.apps.cntv.cn/api/getHttpVideoInfo.do?pid=${guid}`) as VideoInfoType;
+    const videoInfo: VideoInfoType = await getURLAsJSON(
+        `https://vdn.apps.cntv.cn/api/getHttpVideoInfo.do?pid=${guid}`,
+        fetchOptions
+    ) as VideoInfoType;
 
     if (videoInfo.ack === "no")
         throw new Error(`invalid guid "${guid}"`);
@@ -143,9 +153,9 @@ async function getM3U8FromWebPage(url: string, resolution: number): Promise<stri
     return ret;
 }
 
-async function *getTsFromM3U8(url: string): AsyncGenerator<Uint8Array> {
+async function *getTsFromM3U8(url: string, fetchOptions?: RequestInit): AsyncGenerator<Uint8Array> {
     cmdutil.log(`decrypting from m3u8 direct link "${url}"...`);
-    const m3u8Content: string = await getURLAsText(url);
+    const m3u8Content: string = await getURLAsText(url, fetchOptions);
     const buffers: Uint8Array[] = [];
 
     for (const line of m3u8Content.split("\n")) {

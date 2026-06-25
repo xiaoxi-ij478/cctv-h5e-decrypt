@@ -9,65 +9,101 @@
             }
         </style>
         <script type="module">
-            import * as decryptLib from "./build/final-web/final-web.js";
+            import { WorkerMessageType, util } from "./build/final-web/final-web.js";
 
-            decryptLib.cmdutil.setLogFunc((type, content) => {
+            let decryptingBuffer = false, decryptingGUID = false;
+            let decryptBuffer = null;
+            let inputBuffer = null;
+            const inputFile = document.getElementById("input-file");
+            const inputGUID = document.getElementById("input-guid");
+            const form = document.getElementById("form");
+            const logs = document.getElementById("logs");
+            const failure = document.getElementById("failure");
+            const success = document.getElementById("success");
+            const decryptWorker = new Worker("build/final-web/final-web.js");
+
+            function appendLogEntry(message) {
                 const p = document.createElement("p");
-                switch (type) {
-                    case decryptLib.cmdutil.LogType.DEBUG:
-                        // alert(content);
-                        p.remove();
-                        return; // NOTE!
+                p.textContent = message;
+                document.getElementById("logs").append(p);
+            }
 
-                    case decryptLib.cmdutil.LogType.LOG:
-                        p.append(`提示：${content}`);
+            function clearLogEntry() {
+                Array.from(logs.children).forEach(i => i.remove());
+            }
+
+            function sendMessage(type, payload = undefined, transferArr = undefined) {
+                decryptWorker.postMessage({ type, payload }, transferArr);
+            }
+
+            decryptWorker.addEventListener("message", e => {
+                e = e.data;
+
+                switch (e.type) {
+                    case WorkerMessageType.WANT_DECRYPT_BUFFER:
+                    case WorkerMessageType.WANT_DECRYPT_GUID:
+                    case WorkerMessageType.PUSH_WORKER_ENCRYPTED_BUFFER:
+                        console.error("this message is not intended to be sent to the browser");
                         break;
 
-                    case decryptLib.cmdutil.LogType.WARN:
-                        p.append(`警告：${content}`);
+                    case WorkerMessageType.FINISH_DECRYPT_BUFFER:
+                        if (decryptingBuffer) {
+                            console.error("this message is not intended to be sent when the decrypt type is custom buffer");
+                            break;
+                        }
+
+                        const newURL = URL.createObjectURL(new Blob(decryptBuffer));
+                        document.getElementById("success").classList.remove("nodisplay");
+                        document.getElementById("failure").classList.add("nodisplay");
+                        document.getElementById("success-file-link").href = newURL;
                         break;
 
-                    case decryptLib.cmdutil.LogType.ERROR:
-                        p.append(`错误：${content}`);
+                    case WorkerMessageType.PUSH_BROWSER_DECRYPTED_BUFFER:
+                        decryptBuffer = util.appendUint8Array(decryptBuffer, e.payload.buffer);
+                        const t = inputBuffer.subarray(0, 188 * 10000);
+                        inputBuffer = inputBuffer.subarray(188 * 10000);
+                        sendMessage(WorkerMessageType.PUSH_WORKER_ENCRYPTED_BUFFER, { buffer: t });
+
+                        break;
+                    case WorkerMessageType.DECRYPT_ERROR:
+                        failure.classList.remove("nodisplay");
+                        failure.textContent = e;
+                        success.classList.add("nodisplay");
+                        break;
+
+                    case WorkerMessageType.REPORT_DEBUG:
+                    case WorkerMessageType.REPORT_LOG:
+                    case WorkerMessageType.REPORT_WARN:
+                    case WorkerMessageType.REPORT_DEBUG:
                         break;
                 }
-                document.getElementById("logs").append(p);
             });
 
-            const inputFile = document.getElementById("input-file");
-            const inputURL = document.getElementById("input-url");
-            document.getElementById("form").addEventListener("submit", async function(e) {
-                e.preventDefault();
-                for (const i of Array.from(document.getElementById("logs").children))
-                    i.remove();
-
+            form.addEventListener("submit", async e => {
                 const file = inputFile.files[0];
-                const url = inputURL.value;
+                const guid = inputGUID.value;
                 let newBuffer, resolution;
 
-                if (!file && !url) {
-                    alert("必须指定文件或者 URL！");
+                e.preventDefault();
+                clearLogEntry();
+                if (!file && !guid) {
+                    alert("必须指定文件或者 GUID！");
                     return;
                 }
 
-                try {
-                    if (url) {
-                        resolution = Number(new FormData(document.getElementById("form")).get("resolution"));
-                        newBuffer = await decryptLib.decryptURL(url, resolution);
-                    } else
-                        newBuffer = await decryptLib.decryptBuffer(await file.bytes());
-
-                } catch (e) {
-                    document.getElementById("failure").classList.remove("nodisplay");
-                    document.getElementById("success").classList.add("nodisplay");
-                    document.getElementById("failure").textContent = e;
-                    return;
+                if (guid) {
+                    decryptingGUID = true;
+                    resolution = Number(new FormData(form).get("resolution"));
+                    sendMessage(WorkerMessageType.WANT_DECRYPT_GUID, { guid, resolution });
+                } else {
+                    decryptingBuffer = true;
+                    decryptBuffer = new Uint8Array(file.size);
+                    inputBuffer = await file.bytes();
+                    sendMessage(WorkerMessageType.WANT_DECRYPT_BUFFER);
+                    const t = inputBuffer.subarray(0, 188 * 10000);
+                    inputBuffer = inputBuffer.subarray(188 * 10000);
+                    sendMessage(WorkerMessageType.PUSH_WORKER_ENCRYPTED_BUFFER, { buffer: t });
                 }
-
-                const newURL = URL.createObjectURL(new Blob(newBuffer));
-                document.getElementById("success").classList.remove("nodisplay");
-                document.getElementById("failure").classList.add("nodisplay");
-                document.getElementById("success-file-link").href = newURL;
             });
         </script>
     </head>
@@ -84,8 +120,9 @@
                 <hr/>
 
                 <section>
-                    <label for="input-url">或输入要解密的视频所在网页的 URL（也就是 tv.cctv.com/xxx 而不是 2000.m3u8）：</label>
-                    <input type="url" name="input-url" id="input-url" placeholder="https://tv.cctv.com/xxx" />
+                    <p><em>因为技术原因（CORS 跨站请求限制），此网页端不能直接提供链接下载，需要手动获取 GUID。<a href="https://www.52pojie.cn/thread-2052017-1-1.html">获取方法</a></em></p>
+                    <label for="input-guid">或输入要解密的视频的 GUID（形如 8bc62195181146d1894bf7ca5ac4d3f5）：</label>
+                    <input type="text" name="input-guid" id="input-guid"/>
                 </section>
                 <section>
                     <div><label>以及清晰度：</label></div>
@@ -112,7 +149,7 @@
                     </div>
                 </section>
                 <section>
-                    <label>（如果同时指定了两者，那么将使用 URL）</label>
+                    <label>（如果同时指定了两者，那么将使用 GUID）</label>
                 </section>
                 <hr/>
                 <section>

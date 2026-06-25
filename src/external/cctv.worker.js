@@ -21,9 +21,7 @@ var CNTVModule = function() {
                 this.#url = url;
                 this.#method = method;
                 if (this.#url === "https://tv.cctv.com/Library/H5player.json")
-                    this.#resolveFunc = this.#resolveH5PlayerJSON;
-                else
-                    this.#resolveFunc = fetch;
+                    this.#url = "data:application/json;base64,eyJoNXBsYXllciI6eyJ2ZXIiOjIwMTkwOTA0LCJtZDUiOiJjN2VkNWE3MWRiZTRkZWUxYTJiYTE3MWY2NjBlZTk4ZCIsIkJUaW1lIjoiMjAxOS0wOS0wNC0yMDoyNToxMCJ9fQ==";
 
                 if (!async) // let's hope not so
                     throw new Error("not supported");
@@ -32,21 +30,8 @@ var CNTVModule = function() {
                 this.onreadystatechange?.();
             }
 
-            async #resolveH5PlayerJSON() {
-                // Blob has an interface similar to Response
-                return new Blob([
-                    JSON.stringify({
-                        h5player: {
-                            ver: 20190904,
-                            md5: "c7ed5a71dbe4dee1a2ba171f660ee98d",
-                            BTime: "2019-09-04-20:25:10"
-                        }
-                    })
-                ]);
-            }
-
             send(body) {
-                this.#resolveFunc(
+                fetch(
                     this.#url,
                     { body, method: this.#method }
                 ).then(resp => {

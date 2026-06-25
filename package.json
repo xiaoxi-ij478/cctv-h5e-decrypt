@@ -23,7 +23,7 @@
       "import": "./build/decrypt.js",
       "types": "./build/decrypt.d.ts"
     },
-    "util": {
+    "./util": {
       "import": "./build/util.js",
       "types": "./build/util.d.ts"
     }

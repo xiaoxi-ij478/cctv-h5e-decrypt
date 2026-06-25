@@ -7,12 +7,30 @@ import * as process from "node:process";
 
 import * as decrypt from "./decrypt.js";
 import * as util from "./util.js";
-import * as cmdutil from "./cmdutil.js";
 
 function usage(): never {
     cmdutil.error("usage: main.js [--quiet] [--get-m3u8] [--get-guid <resolution>] {in.ts | url} out.ts");
     process.exit(1);
 }
+
+let noLog: boolean = false;
+
+const cmdutil = {
+    log(...arg: any[]): void {
+        if (!noLog)
+           console.log(...arg);
+    },
+
+    warn(...arg: any[]): void {
+        if (!noLog)
+            console.warn(...arg);
+    },
+
+    error(...arg: any[]): void {
+        if (!noLog)
+            console.error(...arg);
+    }
+};
 
 async function main(): Promise<void> {
     const decrypter: decrypt.Decrypter = new decrypt.Decrypter;
@@ -21,7 +39,7 @@ async function main(): Promise<void> {
     let guidResolution: number = 2000;
 
     if (process.argv.length >= 3 && process.argv[2] === "--quiet")
-        cmdutil.setNoLog(true);
+        noLog = true;
 
     if (process.argv.length >= 3 && process.argv[2] === "--get-m3u8") {
         getM3U8 = true;
