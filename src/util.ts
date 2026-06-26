@@ -23,6 +23,8 @@ function arrayEquals(a: Uint8Array, b: Uint8Array): boolean {
     );
 }
 
+const doNotCheckAtAll: boolean = false;
+
 function checkNumberEqual(
     val: number,
     expected: number,
@@ -56,8 +58,8 @@ function checkNumberNotEqual(
 // toBuffer: if provided, the existing arraybuffer to append
 //    but if the provided buffer is too small, we'll allocate a new buffer
 function concatUint8Arrays(arr: Uint8Array[], toBuffer?: ArrayBufferLike): Uint8Array {
-    const totalLength: number = arr.reduce((a, e) => a + e.byteLength, 0);
-    let reallocated: boolean = false;
+    const totalLength = arr.reduce((a, e) => a + e.byteLength, 0);
+    let reallocated = false;
 
     if (toBuffer && toBuffer.byteLength < totalLength) {
         reallocated = true;
@@ -69,14 +71,10 @@ function concatUint8Arrays(arr: Uint8Array[], toBuffer?: ArrayBufferLike): Uint8
         0,
         totalLength
     );
-    if (toBuffer && !reallocated)
-        arr.slice(1).reduce(
-            (a, e) => { newArr.set(e, a); return a + e.byteLength; }, arr[0].byteLength
-        );
-    else
-        arr.reduce(
-            (a, e) => { newArr.set(e, a); return a + e.byteLength; }, 0
-        );
+    arr.reduce(
+        (a, e) => { newArr.set(e, a); return a + e.byteLength; },
+        0
+    );
 
     return newArr;
 }
@@ -117,11 +115,10 @@ async function getM3U8FromWebPage(url: string, resolution: number, fetchOptions?
     if (!Number.isInteger(resolution))
         throw new Error("resolution not integer");
 
-    cmdutil.log(`decrypting from video page link "${url}" with resolution "${resolution}"...`);
-    const webpageContent: string = await getURLAsText(url, fetchOptions);
+    const webpageContent = await getURLAsText(url, fetchOptions);
     let guid: string | undefined;
     for (const line of webpageContent.split("\n")) {
-        if (!line.match(/var (?:video_)?guid\s*=/))
+        if (!line.match(/var\s+(?:video_)?guid\s*=/))
             continue;
 
         guid = line.replace(/.*(["'])(.*)\1.*/, "$2");
@@ -140,7 +137,7 @@ async function getM3U8FromGUID(guid: string, resolution: number, fetchOptions?: 
 
     cmdutil.log(`got guid "${guid}"`);
     type VideoInfoType = { manifest: { hls_h5e_url: string }, ack: string };
-    const videoInfo: VideoInfoType = await getURLAsJSON(
+    const videoInfo = await getURLAsJSON(
         `https://vdn.apps.cntv.cn/api/getHttpVideoInfo.do?pid=${guid}`,
         fetchOptions
     ) as VideoInfoType;
@@ -148,23 +145,53 @@ async function getM3U8FromGUID(guid: string, resolution: number, fetchOptions?: 
     if (videoInfo.ack === "no")
         throw new Error(`invalid guid "${guid}"`);
 
-    const ret: string = videoInfo.manifest.hls_h5e_url.replace(/main/g, resolution.toString()).replace(/\?.*/, "");
+    const ret = videoInfo.manifest.hls_h5e_url.replace(/main/g, resolution.toString()).replace(/\?.*/, "");
     cmdutil.log(`got link "${ret}"`);
     return ret;
 }
 
-async function *getTsFromM3U8(url: string, fetchOptions?: RequestInit): AsyncGenerator<Uint8Array> {
-    cmdutil.log(`decrypting from m3u8 direct link "${url}"...`);
-    const m3u8Content: string = await getURLAsText(url, fetchOptions);
-    const buffers: Uint8Array[] = [];
+class Queue<T> {
+    private arr: T[] = [];
+    private getPromiseResolves: ((e: void) => void)[] = [];
+    private putPromiseResolves: ((e: void) => void)[] = [];
+    readonly maxSize: number;
 
-    for (const line of m3u8Content.split("\n")) {
-        if (!line || line.match(/^#/))
-            continue;
-
-        cmdutil.log(`decrypting slice "${line}"...`);
-        yield await getURLAsUint8Array(new URL(line, url));
+    constructor(maxSize: number = 10) {
+        this.maxSize = maxSize;
     }
 
-    cmdutil.log("done");
+    async get(): Promise<T> {
+        if (!this.arr.length)
+            await new Promise(
+                resolve => this.getPromiseResolves.push(resolve)
+            );
+
+        this.putPromiseResolves.shift()?.();
+        return this.arr.shift()!;
+    }
+
+    async put(el: T): Promise<void> {
+        if (this.arr.length >= this.maxSize)
+            await new Promise(
+                resolve => this.putPromiseResolves.push(resolve)
+            );
+
+        this.getPromiseResolves.shift()?.();
+        this.arr.push(el);
+    }
+}
+
+async function backgroundFetcher(urls: [string, string][], queue: Queue<Uint8Array>): Promise<void> {
+    for (const i in urls)
+        await queue.put(await getURLAsUint8Array(new URL(urls[i][0], urls[i][1])));
+}
+
+async function *getTsFromM3U8(url: string, fetchOptions?: RequestInit): AsyncGenerator<[Uint8Array, number]> {
+    const m3u8Content = await getURLAsText(url, fetchOptions);
+    const queue = new Queue<Uint8Array>;
+    const urls: [string, string][] = m3u8Content.split(/\n/).filter(l => l && !l.match(/^#/)).map(e => [e, url]);
+    backgroundFetcher(urls, queue);
+
+    for (let i = 0; i < urls.length; i++)
+        yield [await queue.get(), urls.length];
 }

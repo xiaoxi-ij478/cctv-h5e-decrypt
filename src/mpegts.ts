@@ -90,7 +90,7 @@ class MPEGTSPacketHeader extends MPEGTSPacketBase {
 
 class MPEGTSPacketAdaptationField extends MPEGTSPacketBase {
     payloadLength: number = 0;
-    payload?: Uint8Array;
+    payload: Uint8Array | null = null;
 
     constructor();
     constructor(data: Uint8Array);
@@ -111,7 +111,7 @@ class MPEGTSPacketAdaptationField extends MPEGTSPacketBase {
 
     reset(): void {
         this.payloadLength = 0;
-        this.payload = undefined;
+        this.payload = null;
     }
 
     dump(): Uint8Array {
@@ -124,8 +124,8 @@ class MPEGTSPacketAdaptationField extends MPEGTSPacketBase {
 
 class MPEGTSPacket extends MPEGTSPacketBase {
     header: MPEGTSPacketHeader = new MPEGTSPacketHeader;
-    adaptationField?: MPEGTSPacketAdaptationField;
-    payload?: Uint8Array;
+    adaptationField: MPEGTSPacketAdaptationField | null = null;
+    payload: Uint8Array | null = null;
 
     constructor();
     constructor(data: Uint8Array);
@@ -141,11 +141,11 @@ class MPEGTSPacket extends MPEGTSPacketBase {
 
     protected init(data: Uint8Array): void {
         if (!disableIntegrityCheck && data.length !== 188) {
-                cmdutil.warn("this MPEG TS Packet has trailing garbage, will discard them");
-                data = data.subarray(0, 188);
-            }
+            cmdutil.warn("this MPEG TS Packet has trailing garbage, will discard them");
+            data = data.subarray(0, 188);
+        }
 
-        this.header = new MPEGTSPacketHeader(data.subarray(0, 4));
+        this.header.reinit(data.subarray(0, 4));
         data = data.subarray(4);
 
         if (this.header.hasAdaptationControl) {
@@ -159,8 +159,8 @@ class MPEGTSPacket extends MPEGTSPacketBase {
 
     reset(): void {
         this.header.reset();
-        this.adaptationField?.reset();
-        this.payload = undefined;
+        this.adaptationField = null;
+        this.payload = null;
     }
 
     dump(): Uint8Array {
@@ -193,7 +193,7 @@ abstract class MPEGTSPESPacketBase {
 
     protected init(data: MPEGTSPacket): void {
         if (!disableIntegrityCheck && data.header.isContinuePacket)
-                throw new Error("MPEGTSPESPacketBase init() expects an initial packet");
+            throw new Error("MPEGTSPESPacketBase init() expects an initial packet");
 
         this.currentCounter = data.header.continuityCount;
         this.pid = data.header.pid;
@@ -205,7 +205,7 @@ abstract class MPEGTSPESPacketBase {
         this.buffer = data.payload!;
 
         if (!disableIntegrityCheck && this.buffer.length < this.requiredBytes)
-                throw new Error("payload length less than required " + this.requiredBytes + " bytes");
+            throw new Error("payload length less than required " + this.requiredBytes + " bytes");
 
         this.realInit();
 
@@ -230,7 +230,7 @@ abstract class MPEGTSPESPacketBase {
             throw new Error("Can't update a complete packet");
 
         if (!disableIntegrityCheck && !data.header.isContinuePacket)
-                throw new Error("update() expects a continue packet");
+            throw new Error("update() expects a continue packet");
 
         this.currentCounter++;
         this.currentCounter &= 0xF;
@@ -274,11 +274,11 @@ abstract class MPEGTSPESPacketBase {
 
 // PSI requires to remove the first byte and the length it indicates
 abstract class MPEGTSPSIPacketBase extends MPEGTSPESPacketBase {
-    protected additionalData: Uint8Array = new Uint8Array;
+    protected additionalData: Uint8Array | null = null;
 
     protected init(data: MPEGTSPacket): void {
         if (!disableIntegrityCheck && data.header.isContinuePacket)
-                throw new Error("MPEGTSPSIPacketBase init() expects an initial packet");
+            throw new Error("MPEGTSPSIPacketBase init() expects an initial packet");
 
         this.initialized = true;
         this.currentCounter = data.header.continuityCount;
@@ -289,8 +289,8 @@ abstract class MPEGTSPSIPacketBase extends MPEGTSPESPacketBase {
             this.buffer = data.payload!.subarray(data.payload![0] + 1);
         }
 
-        if (!disableIntegrityCheck && this.buffer.length < this.requiredBytes)
-                throw new Error("payload length less than required " + this.requiredBytes + " bytes");
+        if (!disableIntegrityCheck && this.buffer!.length < this.requiredBytes)
+            throw new Error("payload length less than required " + this.requiredBytes + " bytes");
 
         this.realInit();
 
@@ -300,8 +300,8 @@ abstract class MPEGTSPSIPacketBase extends MPEGTSPESPacketBase {
 
     dump(): Uint8Array {
         return Uint8Array.of(
-            this.additionalData.byteLength,
-            ...this.additionalData,
+            this.additionalData?.byteLength ?? 0,
+            ...(this.additionalData ?? []),
             ...super.dump()
         );
     }
@@ -377,10 +377,11 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
             this.buffer = this.buffer.subarray(4);
         }
 
-        if (!disableIntegrityCheck && this.remainingLength < 4)
+        if (this.remainingLength < 4) {
+            if (!disableIntegrityCheck)
                 throw new Error("CRC32 length < 4");
 
-        else if (this.remainingLength > 4)
+        } else if (this.remainingLength > 4)
             return false;
 
         if (
@@ -521,10 +522,11 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
             this.remainingLength -= 5 + descriptorLength;
         }
 
-        if (!disableIntegrityCheck && this.remainingLength < 4)
-            throw new Error("CRC32 length < 4");
+        if (this.remainingLength < 4) {
+            if (!disableIntegrityCheck)
+                throw new Error("CRC32 length < 4");
 
-        else if (this.remainingLength > 4)
+        } else if (this.remainingLength > 4)
             return false;
 
         if (
@@ -767,7 +769,6 @@ class MPEGTS {
             this.packets.push(new MPEGTSPacket(data.subarray(0, 188)));
             data = data.subarray(188);
         }
-
 /*
         // first find if there's PAT
         let patUpdated = false;
@@ -846,8 +847,8 @@ class MPEGTS {
                 });
 
             } else {
-                ret.at(-1)?.pes.update(packet);
-                ret.at(-1)?.indexes.push(Number(packetIndex));
+                ret.at(-1)!.pes.update(packet);
+                ret.at(-1)!.indexes.push(Number(packetIndex));
             }
         }
 

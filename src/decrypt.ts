@@ -5,6 +5,7 @@ import * as cctvWorkerModule from "./external/cctv.worker.js";
 import * as nalutil from "./nalutil.js";
 import * as mpegts from "./mpegts.js";
 import * as util from "./util.js";
+import * as cmdutil from "./cmdutil.js";
 
 export { Decrypter };
 
@@ -83,7 +84,7 @@ class Decrypter {
     }
 
     // warning: this function will modify `data` in-place
-    protected decryptNALU(data: nalutil.NALU): nalutil.NALU {
+    decryptNALU(data: nalutil.NALU): nalutil.NALU {
         if (!this.sessionBegin)
             throw new Error("session not started yet");
 
@@ -190,7 +191,7 @@ class Decrypter {
     }
 
     // warning: this function will modify `tsFile` in-place
-    protected decryptTsBuffer(tsFile: mpegts.MPEGTS): mpegts.MPEGTS {
+    decryptTsBuffer(tsFile: mpegts.MPEGTS): mpegts.MPEGTS {
         let videoStreamPID: number = -1;
 /*
         // assume there's just one PMT

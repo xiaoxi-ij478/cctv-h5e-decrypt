@@ -17,7 +17,7 @@ enum LogType {
     ERROR
 };
 
-type LogFuncType = (type: LogType, content: string) => void;
+type LogFuncType = (type: LogType, content: any) => void;
 
 let logFunc: LogFuncType = (type, content) => {
     switch (type) {
@@ -57,29 +57,29 @@ function getNoLog(): boolean {
     return noLog;
 }
 
-function debug(content: string): void {
-    if (!noLog)
+function debug(content: any): void {
+    if (noLog)
         return;
 
     logFunc(LogType.DEBUG, content);
 }
 
-function log(content: string): void {
-    if (!noLog)
+function log(content: any): void {
+    if (noLog)
         return;
 
     logFunc(LogType.LOG, content);
 }
 
-function warn(content: string): void {
-    if (!noLog)
+function warn(content: any): void {
+    if (noLog)
         return;
 
     logFunc(LogType.WARN, content);
 }
 
-function error(content: string): void {
-    if (!noLog)
+function error(content: any): void {
+    if (noLog)
         return;
 
     logFunc(LogType.ERROR, content);

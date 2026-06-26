@@ -1,60 +1,32 @@
 import * as decrypt from "./decrypt.js";
 import * as cmdutil from "./cmdutil.js";
-import * as util from "./util.js";
-
-export { WorkerMessageType, WorkerMessagePayload, WorkerMessage, util };
+import { util, WorkerMessageType, WorkerMessagePayload, WorkerMessage } from "./web-decrypt-worker-type.js";
 
 enum DecryptStatus {
     NOT_DECRYPTING,
     DECRYPTING_BUFFER_INITIALIZING,
     DECRYPTING_BUFFER_CAN_PUSH,
-    DECRYPTING_GUID,
-};
-
-enum WorkerMessageType {
-    WANT_DECRYPT_BUFFER, // to worker
-    WANT_DECRYPT_GUID, // to worker
-    PUSH_WORKER_ENCRYPTED_BUFFER, // to worker
-    PUSH_BROWSER_DECRYPTED_BUFFER, // to browser
-    FINISH_DECRYPT_BUFFER, // to browser (means guid decrypt has done) / worker (means all buffer has been pushed)
-    DECRYPT_ERROR, // to browser
-    REPORT_DEBUG, // to browser
-    REPORT_LOG, // to browser
-    REPORT_WARN, // to browser
-    REPORT_DEBUG // to browser
-};
-
-type WorkerMessagePayload =
-    undefined | // for WANT_DECRYPT_BUFFER, FINISH_DECRYPT_BUFFER
-    { guid: string, resolution: number } | // for WANT_DECRYPT_GUID, the guid to decrypt
-    { buffer: Uint8Array } |
-        // for PUSH_WORKER_ENCRYPTED_BUFFER, the buffer to decrypt
-        // for PUSH_BROWSER_DECRYPTED_BUFFER, the decrypted buffer
-    { message: string | Error } // for REPORT_*, DECRYPT_ERROR
-;
-
-type WorkerMessage = {
-    type: WorkerMessageType,
-    payload: WorkerMessagePayload
+    DECRYPTING_GUID
 };
 
 let decryptStatus: DecryptStatus = DecryptStatus.NOT_DECRYPTING;
 let decrypter: decrypt.Decrypter | null = null;
 
-addEventListener("message", (e: MessageEvent): void => {
+self.addEventListener("message", (e: MessageEvent): void => {
     const d: WorkerMessage = e.data as WorkerMessage;
 
     switch (d.type) {
         case WorkerMessageType.WANT_DECRYPT_BUFFER:
             if (decryptStatus !== DecryptStatus.NOT_DECRYPTING) {
-                console.error("already decrypting");
+                cmdutil.error("already decrypting");
                 break;
             }
 
-            decrypting = DecryptStatus.DECRYPTING_BUFFER_INITIALIZING;
+            decryptStatus = DecryptStatus.DECRYPTING_BUFFER_INITIALIZING;
             decrypter = new decrypt.Decrypter;
             decrypter.beginDecryptSession().then(() => {
-                decrypting = DecryptStatus.DECRYPTING_BUFFER_CAN_PUSH;
+                decryptStatus = DecryptStatus.DECRYPTING_BUFFER_CAN_PUSH;
+                sendMessage(WorkerMessageType.CAN_PUSH_ENCRYPTED_BUFFER);
             }).catch(e => {
                 sendMessage(WorkerMessageType.DECRYPT_ERROR, { message: e });
                 decrypter = null;
@@ -64,16 +36,16 @@ addEventListener("message", (e: MessageEvent): void => {
 
         case WorkerMessageType.WANT_DECRYPT_GUID:
             if (decryptStatus !== DecryptStatus.NOT_DECRYPTING) {
-                console.error("already decrypting");
+                cmdutil.error("already decrypting");
                 break;
             }
 
-            decrypting = DecryptStatus.DECRYPTING_GUID;
+            decryptStatus = DecryptStatus.DECRYPTING_GUID;
             decrypter = new decrypt.Decrypter;
             const info = d.payload as { guid: string, resolution: number };
             decryptGUID(info.guid, info.resolution).then(() => {
                 sendMessage(WorkerMessageType.FINISH_DECRYPT_BUFFER);
-                decrypter.endDecryptSession();
+                decrypter!.endDecryptSession();
                 decrypter = null;
                 decryptStatus = DecryptStatus.NOT_DECRYPTING;
             }).catch(e => {
@@ -85,15 +57,15 @@ addEventListener("message", (e: MessageEvent): void => {
         
         case WorkerMessageType.PUSH_WORKER_ENCRYPTED_BUFFER:
             if (decryptStatus !== DecryptStatus.DECRYPTING_BUFFER_CAN_PUSH) {
-                console.error("decrypter has not initialized or type is not custom buffer");
+                cmdutil.error("decrypter has not initialized or type is not custom buffer");
                 break;
             }
             
             try {
-                const buffer = decrypter.decryptTsBufferUint8Array((d.payload as { buffer: Uint8Array }).buffer);
+                const buffer: Uint8Array = decrypter!.decryptTsBufferUint8Array((d.payload as { buffer: Uint8Array }).buffer);
                 sendMessage(
                     WorkerMessageType.PUSH_BROWSER_DECRYPTED_BUFFER,
-                    { buffer: buffer.buffer },
+                    { buffer },
                     [buffer.buffer]
                 );
 
@@ -105,12 +77,12 @@ addEventListener("message", (e: MessageEvent): void => {
             break;
         
         case WorkerMessageType.FINISH_DECRYPT_BUFFER:
-            if (decryptStatus !== DecryptStatus.DECRYPTING_BUFFER) {
-                console.error("decrypt type is not 'user provided buffer'");
+            if (decryptStatus !== DecryptStatus.DECRYPTING_BUFFER_CAN_PUSH) {
+                cmdutil.error("decrypt type is not custom buffer");
                 break;
             }
             
-            decrypter.endDecryptSession();
+            decrypter!.endDecryptSession();
             decrypter = null;
             decryptStatus = DecryptStatus.NOT_DECRYPTING;
             break;
@@ -120,27 +92,30 @@ addEventListener("message", (e: MessageEvent): void => {
         case WorkerMessageType.REPORT_DEBUG:
         case WorkerMessageType.REPORT_LOG:
         case WorkerMessageType.REPORT_WARN:
-        case WorkerMessageType.REPORT_DEBUG:
-            console.error("this message is not intended to be sent to the worker");
+        case WorkerMessageType.REPORT_ERROR:
+            cmdutil.error("this message is not intended to be sent to the worker");
             break;
     }
 });
 
 function sendMessage(type: WorkerMessageType, payload?: WorkerMessagePayload, transferArr?: Transferable[]): void {
-    postMessage({ type, payload }, transferArr);
+    (self as any).postMessage({ type, payload }, transferArr);
 }
 
 async function decryptGUID(guid: string, resolution: number): Promise<void> {
-    await decrypter.beginDecryptSession();
+    await decrypter!.beginDecryptSession();
+    let s = 0;
+
     for await (
-        const tsBuffer of util.getTsFromM3U8(
+        const [tsBuffer, totalSlice] of util.getTsFromM3U8(
             await util.getM3U8FromGUID(guid, resolution)
         )
     ) {
-        const buffer = decrypter.decryptTsBufferUint8Array(tsBuffer);
+        const buffer = decrypter!.decryptTsBufferUint8Array(tsBuffer);
+        cmdutil.log(`decrypting slice ${s++}.ts...`);
         sendMessage(
             WorkerMessageType.PUSH_BROWSER_DECRYPTED_BUFFER,
-            { buffer: buffer.buffer },
+            { buffer, totalSlice },
             [buffer.buffer]
         );
     }
@@ -148,19 +123,19 @@ async function decryptGUID(guid: string, resolution: number): Promise<void> {
 
 cmdutil.setLogFunc((type, message) => {
     switch (type) {
-        case decryptLib.cmdutil.LogType.DEBUG:
+        case cmdutil.LogType.DEBUG:
             sendMessage(WorkerMessageType.REPORT_DEBUG, { message });
             break;
 
-        case decryptLib.cmdutil.LogType.LOG:
+        case cmdutil.LogType.LOG:
             sendMessage(WorkerMessageType.REPORT_LOG, { message });
             break;
 
-        case decryptLib.cmdutil.LogType.WARN:
+        case cmdutil.LogType.WARN:
             sendMessage(WorkerMessageType.REPORT_WARN, { message });
             break;
 
-        case decryptLib.cmdutil.LogType.ERROR:
+        case cmdutil.LogType.ERROR:
             sendMessage(WorkerMessageType.REPORT_ERROR, { message });
             break;
     }
