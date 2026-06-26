@@ -2,10 +2,14 @@
 <html>
     <head>
         <title> CCTV h5e Decrypter </title>
-        <meta charset="utf-8"/>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <style>
             .nodisplay {
                 display: none;
+            }
+            #logs {
+                word-break: break-all;
             }
         </style>
         <script type="module">
@@ -71,6 +75,7 @@
                             break;
                         }
 
+                        appendLogEntry("提示：decrypting...");
                         sendMessage(WorkerMessageType.PUSH_WORKER_ENCRYPTED_BUFFER, { buffer: inputBuffer }, [inputBuffer.buffer]);
                         inputBuffer = null;
                         break;
@@ -175,41 +180,41 @@
                     <label for="input-file">选择一个要解密的文件：</label>
                     <input type="file" name="input-file" id="input-file" />
                 </section>
-                <hr/>
+                <hr />
 
                 <section>
                     <p><em>因为技术原因（CORS 跨站请求限制），此网页端不能直接提供链接下载，需要手动获取 GUID。<a href="https://www.52pojie.cn/thread-2052017-1-1.html">获取方法</a></em></p>
                     <label for="input-guid">或输入要解密的视频的 GUID（形如 8bc62195181146d1894bf7ca5ac4d3f5）：</label>
-                    <input type="text" name="input-guid" id="input-guid"/>
+                    <input type="text" name="input-guid" id="input-guid" />
                 </section>
                 <section>
                     <div><label>以及清晰度：</label></div>
 
                     <div>
                         <label for="resolution450">450</label>
-                        <input type="radio" id="resolution450" name="resolution" value="450"/>
+                        <input type="radio" id="resolution450" name="resolution" value="450" />
                     </div>
                     <div>
                         <label for="resolution850">850</label>
-                        <input type="radio" id="resolution850" name="resolution" value="850"/>
+                        <input type="radio" id="resolution850" name="resolution" value="850" />
                     </div>
                     <div>
                         <label for="resolution1200">1200</label>
-                        <input type="radio" id="resolution1200" name="resolution" value="1200"/>
+                        <input type="radio" id="resolution1200" name="resolution" value="1200" />
                     </div>
                     <div>
                         <label for="resolution2000">2000</label>
-                        <input type="radio" id="resolution2000" name="resolution" value="2000" checked/>
+                        <input type="radio" id="resolution2000" name="resolution" value="2000" checked />
                     </div>
                     <div>
                         <label for="resolution4000">4000</label>
-                        <input type="radio" id="resolution4000" name="resolution" value="4000"/>
+                        <input type="radio" id="resolution4000" name="resolution" value="4000" />
                     </div>
                 </section>
                 <section>
                     <label>（如果同时指定了两者，那么将使用 GUID）</label>
                 </section>
-                <hr/>
+                <hr />
                 <section>
                     <button id="start-decrypt">开始解密</button>
                 </section>
