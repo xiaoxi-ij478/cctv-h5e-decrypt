@@ -111,8 +111,8 @@ async function decryptGUID(guid: string, resolution: number): Promise<void> {
             await util.getM3U8FromGUID(guid, resolution)
         )
     ) {
-        const buffer = decrypter!.decryptTsBufferUint8Array(tsBuffer);
         cmdutil.log(`decrypting slice ${s++}.ts...`);
+        const buffer = decrypter!.decryptTsBufferUint8Array(tsBuffer);
         sendMessage(
             WorkerMessageType.PUSH_BROWSER_DECRYPTED_BUFFER,
             { buffer, totalSlice },

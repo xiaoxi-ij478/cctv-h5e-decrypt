@@ -9,6 +9,12 @@
 经过改造以后，这个项目应该可以嵌入到其他项目中作为一个库。
 但我还没有什么经验，因此可能需要一些调整才可以使用。
 
+## 网页版
+
+现在已经有一个简便的网页版可用了：<https://cctv-decrypt.xiaoxi-ij478.com>
+
+不过网页版需要手动获取 GUID。
+
 ## 使用方法
 
 首先，安装 node 运行时环境，参见 "[Node.js — 下载 Node.js®](https://nodejs.org/zh-cn/download)"。
