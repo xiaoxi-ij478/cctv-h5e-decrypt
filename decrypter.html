@@ -107,6 +107,8 @@
                         failureReason.textContent = e.payload.message.toString();
                         success.classList.add("nodisplay");
                         decryptingBuffer = decryptingGUID = false;
+                        decryptBuffer = inputBuffer = null;
+                        notReallocated = true;
                         break;
 
                     case WorkerMessageType.REPORT_DEBUG:
