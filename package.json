@@ -1,6 +1,6 @@
 {
   "name": "cctv-h5e-decrypt",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Decrypt CCTV h5e-encrypted videos",
   "type": "module",
   "homepage": "https://github.com/xiaoxi-ij478/cctv-h5e-decrypt#readme",
@@ -22,12 +22,25 @@
     ".": {
       "import": "./build/decrypt.js",
       "types": "./build/decrypt.d.ts"
+    },
+    "./util": {
+      "import": "./build/util.js",
+      "types": "./build/util.d.ts"
+    },
+    "./mpegts": {
+      "import": "./build/mpegts.js",
+      "types": "./build/mpegts.d.ts"
+    },
+    "./nalutil": {
+      "import": "./build/nalutil.js",
+      "types": "./build/nalutil.d.ts"
     }
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "rm -rf build && npx tsc && rm -f build/external/*.map && diff src/external/cctv.worker.js src/external/cctv.worker.orig.js -u >src/external/cctv.worker.diff",
-    "bundle": "rm -rf build/final && npx esbuild src/main.ts --sourcemap=external --bundle --platform=node --format=esm --outfile=build/final/final.js && cd build/final && tar zcvf ../final.tar.gz . && zip -r ../final.zip .",
+    "build": "rm -rf build && diff src/external/cctv.worker.js src/external/cctv.worker.orig.js -u >src/external/cctv.worker.diff; npx tsc && mkdir build/external && cp src/external/cctv.worker.js build/external",
+    "bundle": "rm -rf build/final && npx esbuild src/main.ts --sourcemap=linked --bundle --platform=node --format=esm --outfile=build/final/final.js && cd build/final && tar zcvf ../final.tar.gz . && zip -r ../final.zip .",
+    "bundle-web": "rm -rf build/final-web && npx esbuild src/web-decrypt-worker.ts src/web-decrypt-worker-type.ts --sourcemap=linked --bundle --format=esm --outdir=build/final-web/",
     "sync-latest-worker": "TMP=$(mktemp) && curl -qfsS https://player.cntv.cn/h5vod/cctv.worker.js | npx js-beautify -n >$TMP && if cmp \"$TMP\" src/external/cctv.worker.orig.js; then rm -f $TMP; else mv -f \"$TMP\" src/external/cctv.worker.orig.js && echo need to update cctv.worker.js; fi"
   },
   "dependencies": {

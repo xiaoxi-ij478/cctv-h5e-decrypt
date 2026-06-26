@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title> CCTV h5e Decrypter </title>
+        <meta charset="utf-8"/>
+        <style>
+            .nodisplay {
+                display: none;
+            }
+        </style>
+        <script type="module">
+            import { WorkerMessageType, util } from "./build/final-web/web-decrypt-worker-type.js";
+
+            let decryptingBuffer = false, decryptingGUID = false;
+            let decryptBuffer = null;
+            let inputBuffer = null;
+            let newURL;
+            let file, guid;
+            let notReallocated = true;
+            const inputFile = document.getElementById("input-file");
+            const inputGUID = document.getElementById("input-guid");
+            const form = document.getElementById("form");
+            const logs = document.getElementById("logs");
+            const failure = document.getElementById("failure");
+            const success = document.getElementById("success");
+            const failureReason = document.getElementById("failure-reason");
+            const successFileLink = document.getElementById("success-file-link");
+            const decryptWorker = new Worker("build/final-web/web-decrypt-worker.js");
+
+            function appendLogEntry(message) {
+                document.getElementById("logs").textContent = message;
+            }
+
+            function clearLogEntry() {
+                document.getElementById("logs").textContent = "";
+            }
+
+            function sendMessage(type, payload = undefined, transferArr = undefined) {
+                decryptWorker.postMessage({ type, payload }, transferArr);
+            }
+
+            decryptWorker.addEventListener("message", e => {
+                e = e.data;
+
+                switch (e.type) {
+                    case WorkerMessageType.WANT_DECRYPT_BUFFER:
+                    case WorkerMessageType.WANT_DECRYPT_GUID:
+                    case WorkerMessageType.PUSH_WORKER_ENCRYPTED_BUFFER:
+                        cmdutil.error("this message is not intended to be sent to the browser");
+                        break;
+
+                    case WorkerMessageType.FINISH_DECRYPT_BUFFER:
+                        if (decryptingBuffer) {
+                            cmdutil.error("decrypt type is not GUID");
+                            break;
+                        }
+
+                        newURL = URL.createObjectURL(new Blob([decryptBuffer]));
+                        success.classList.remove("nodisplay");
+                        failure.classList.add("nodisplay");
+                        successFileLink.setAttribute("href", newURL);
+                        successFileLink.setAttribute("download", `${guid}.ts`);
+                        decryptingGUID = false;
+                        notReallocated = true;
+                        decryptBuffer = null;
+                        break;
+
+                    case WorkerMessageType.CAN_PUSH_ENCRYPTED_BUFFER:
+                        if (decryptingGUID) {
+                            cmdutil.error("decrypt type is not custom buffer");
+                            break;
+                        }
+
+                        sendMessage(WorkerMessageType.PUSH_WORKER_ENCRYPTED_BUFFER, { buffer: inputBuffer }, [inputBuffer.buffer]);
+                        inputBuffer = null;
+                        break;
+
+                    case WorkerMessageType.PUSH_BROWSER_DECRYPTED_BUFFER:
+                        if (decryptingGUID) {
+                            // preallocate buffer to prevent from reallocation
+                            // use the first slice's size as reference
+                            // and also allocate 20 MiB more
+                            if (notReallocated) {
+                                decryptBuffer = new Uint8Array(
+                                    new ArrayBuffer(e.payload.buffer.byteLength * e.payload.totalSlice + (20 << 20)),
+                                    0,
+                                    0
+                                );
+                                notReallocated = false;
+                            }
+
+                            decryptBuffer = util.appendUint8Array(decryptBuffer, e.payload.buffer);
+                            break;
+                        }
+
+                        newURL = URL.createObjectURL(new Blob([e.payload.buffer]));
+                        sendMessage(WorkerMessageType.FINISH_DECRYPT_BUFFER);
+                        success.classList.remove("nodisplay");
+                        failure.classList.add("nodisplay");
+                        successFileLink.setAttribute("href", newURL);
+                        successFileLink.setAttribute("download", file.name);
+                        decryptingBuffer = false;
+                        break;
+
+                    case WorkerMessageType.DECRYPT_ERROR:
+                        failure.classList.remove("nodisplay");
+                        failureReason.textContent = e.payload.message.toString();
+                        success.classList.add("nodisplay");
+                        decryptingBuffer = decryptingGUID = false;
+                        break;
+
+                    case WorkerMessageType.REPORT_DEBUG:
+                        break;
+
+                    case WorkerMessageType.REPORT_LOG:
+                        appendLogEntry(`提示：${e.payload.message.toString()}`);
+                        break;
+
+                    case WorkerMessageType.REPORT_WARN:
+                        appendLogEntry(`警告：${e.payload.message.toString()}`);
+                        break;
+
+                    case WorkerMessageType.REPORT_ERROR:
+                        appendLogEntry(`错误：${e.payload.message.toString()}`);
+                        break;
+                }
+            });
+
+            form.addEventListener("submit", e => {
+                let newBuffer, resolution;
+                e.preventDefault();
+
+                if (decryptingGUID || decryptingBuffer) {
+                    alert("已有一个解密任务！");
+                    return;
+                }
+
+                file = inputFile.files[0];
+                guid = inputGUID.value;
+                if (!file && !guid) {
+                    alert("必须指定文件或者 GUID！");
+                    return;
+                }
+
+                success.classList.add("nodisplay");
+                failure.classList.add("nodisplay");
+                clearLogEntry();
+
+                if (newURL)
+                    URL.revokeObjectURL(newURL);
+
+                if (guid) {
+                    decryptingGUID = true;
+                    resolution = Number(new FormData(form).get("resolution"));
+                    sendMessage(WorkerMessageType.WANT_DECRYPT_GUID, { guid, resolution });
+                } else {
+                    decryptingBuffer = true;
+                    file.bytes().then(f => {
+                        inputBuffer = f;
+                        sendMessage(WorkerMessageType.WANT_DECRYPT_BUFFER);
+                    });
+                }
+            });
+        </script>
+    </head>
+
+    <body>
+        <h1> CCTV h5e 解密器 </h1>
+
+        <article>
+            <form id="form">
+                <section>
+                    <label for="input-file">选择一个要解密的文件：</label>
+                    <input type="file" name="input-file" id="input-file" />
+                </section>
+                <hr/>
+
+                <section>
+                    <p><em>因为技术原因（CORS 跨站请求限制），此网页端不能直接提供链接下载，需要手动获取 GUID。<a href="https://www.52pojie.cn/thread-2052017-1-1.html">获取方法</a></em></p>
+                    <label for="input-guid">或输入要解密的视频的 GUID（形如 8bc62195181146d1894bf7ca5ac4d3f5）：</label>
+                    <input type="text" name="input-guid" id="input-guid"/>
+                </section>
+                <section>
+                    <div><label>以及清晰度：</label></div>
+
+                    <div>
+                        <label for="resolution450">450</label>
+                        <input type="radio" id="resolution450" name="resolution" value="450"/>
+                    </div>
+                    <div>
+                        <label for="resolution850">850</label>
+                        <input type="radio" id="resolution850" name="resolution" value="850"/>
+                    </div>
+                    <div>
+                        <label for="resolution1200">1200</label>
+                        <input type="radio" id="resolution1200" name="resolution" value="1200"/>
+                    </div>
+                    <div>
+                        <label for="resolution2000">2000</label>
+                        <input type="radio" id="resolution2000" name="resolution" value="2000" checked/>
+                    </div>
+                    <div>
+                        <label for="resolution4000">4000</label>
+                        <input type="radio" id="resolution4000" name="resolution" value="4000"/>
+                    </div>
+                </section>
+                <section>
+                    <label>（如果同时指定了两者，那么将使用 GUID）</label>
+                </section>
+                <hr/>
+                <section>
+                    <button id="start-decrypt">开始解密</button>
+                </section>
+            </form>
+
+            <h2>日志：</h2>
+            <section id="logs"></section>
+            <section id="success" class="nodisplay">文件解密成功。<a id="success-file-link">点击下载</a></section>
+            <section id="failure" class="nodisplay">文件解密失败。原因：<span id="failure-reason"></span></section>
+        </article>
+    </body>
+</html>

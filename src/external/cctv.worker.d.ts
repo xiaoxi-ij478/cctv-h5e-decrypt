@@ -13,9 +13,9 @@ type CNTVModuleType = {
 
     HEAP8: Int8Array;
 
-    _CNTV_InitPlayer(mediaTagIDAddr: number): number;
-    _CNTV_UnInitPlayer(mediaTagIDAddr: number): number;
-    _CNTV_UpdatePlayer(mediaTagIDAddr: number): number;
+    _CNTV_InitPlayer: (mediaTagIDAddr: number) => number;
+    _CNTV_UnInitPlayer: (mediaTagIDAddr: number) => number;
+    _CNTV_UpdatePlayer: (mediaTagIDAddr: number) => number;
     _CNTV_jsdecVOD0: CNTVjsdecFuncType;
     _CNTV_jsdecVOD1: CNTVjsdecFuncType;
     _CNTV_jsdecVOD2: CNTVjsdecFuncType;
@@ -26,10 +26,10 @@ type CNTVModuleType = {
     _CNTV_jsdecVOD7: CNTVjsdecFuncType;
     _CNTV_jsdecVOD8: CNTVjsdecFuncType;
 
-    _jsmalloc(size: number): number;
-    _jsfree(addr: number): void;
+    _jsmalloc: (size: number) => number;
+    _jsfree: (addr: number) => void;
 
-    onRuntimeInitialized(): void;
+    onRuntimeInitialized: () => void;
 };
 
 let CNTVModule: () => CNTVModuleType;

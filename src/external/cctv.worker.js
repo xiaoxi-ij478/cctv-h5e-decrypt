@@ -4,54 +4,56 @@ export { CNTVModule };
 var CNTVModule = function() {
         var _scriptDir = "undefined" != typeof document && document.currentScript ? document.currentScript.src : void 0;
 
-        if (typeof XMLHttpRequest === "undefined" && ("object" == typeof process && "object" == typeof process.versions && "string" == typeof process.versions.node))
-            // a very simple xhr implementation to fit the need of __emscripten_fetch_xhr()
-            globalThis.XMLHttpRequest = class {
-                #url;
-                #method;
-                onload;
-                onreadystatechange;
-                onerror;
-                response;
-                status = 0;
-                statusText = "";
-                readyState = 0;
+        // a very simple xhr implementation to fit the need of __emscripten_fetch_xhr()
+        const privateXMLHttpRequest = class {
+            #url;
+            #method;
+            #resolveFunc;
+            onload;
+            onreadystatechange;
+            onerror;
+            response;
+            status = 0;
+            statusText = "";
+            readyState = 0;
 
-                open(method, url, async = true) {
-                    this.#url = url;
-                    this.#method = method;
+            open(method, url, async = true) {
+                this.#url = url;
+                this.#method = method;
+                if (this.#url === "https://tv.cctv.com/Library/H5player.json")
+                    this.#url = "data:application/json;base64,eyJoNXBsYXllciI6eyJ2ZXIiOjIwMTkwOTA0LCJtZDUiOiJjN2VkNWE3MWRiZTRkZWUxYTJiYTE3MWY2NjBlZTk4ZCIsIkJUaW1lIjoiMjAxOS0wOS0wNC0yMDoyNToxMCJ9fQ==";
 
-                    if (!async) // let's hope not so
-                        throw new Error("not supported");
+                if (!async) // let's hope not so
+                    throw new Error("not supported");
 
-                    this.readyState = 1;
+                this.readyState = 1;
+                this.onreadystatechange?.();
+            }
+
+            send(body) {
+                fetch(
+                    this.#url,
+                    { body, method: this.#method }
+                ).then(resp => {
+                    this.readyState = 4;
+                    this.status = resp.status;
+                    this.statusText = resp.statusText;
+
+                    if (!resp.ok)
+                        throw new Error;
+
+                    return resp.arrayBuffer();
+                }).then(abuffer => {
+                    this.response = abuffer;
+
+                    this.onload?.();
                     this.onreadystatechange?.();
-                }
-
-                send(body) {
-                    fetch(
-                        this.#url,
-                        { body, method: this.#method }
-                    ).then(resp => {
-                        this.readyState = 4;
-                        this.status = resp.status;
-                        this.statusText = resp.statusText;
-
-                        if (!resp.ok)
-                            throw new Error;
-
-                        return resp.arrayBuffer();
-                    }).then(abuffer => {
-                        this.response = abuffer;
-
-                        this.onload?.();
-                        this.onreadystatechange?.();
-                    }).catch(err => {
-                        this.onerror?.();
-                        this.onreadystatechange?.();
-                    });
-                }
-            };
+                }).catch(err => {
+                    this.onerror?.();
+                    this.onreadystatechange?.();
+                });
+            }
+        };
 
         return function(CNTVModule) {
             CNTVModule = CNTVModule || {};
@@ -81,7 +83,7 @@ var CNTVModule = function() {
                 return Module.locateFile ? Module.locateFile(A, scriptDirectory) : scriptDirectory + A
             }(ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) && (ENVIRONMENT_IS_WORKER ? scriptDirectory = self.location.href : document.currentScript && (scriptDirectory = document.currentScript.src), _scriptDir && (scriptDirectory = _scriptDir), scriptDirectory = 0 !== scriptDirectory.indexOf("blob:") ? scriptDirectory.substr(0, scriptDirectory.lastIndexOf("/") + 1) : "", read_ = function(e) {
                 try {
-                    var t = new XMLHttpRequest;
+                    var t = new privateXMLHttpRequest;
                     return t.open("GET", e, !1), t.send(null), t.responseText
                 } catch (A) {
                     t = tryParseAsDataURI(e);
@@ -90,7 +92,7 @@ var CNTVModule = function() {
                 }
             }, ENVIRONMENT_IS_WORKER && (readBinary = function(e) {
                 try {
-                    var t = new XMLHttpRequest;
+                    var t = new privateXMLHttpRequest;
                     return t.open("GET", e, !1), t.responseType = "arraybuffer", t.send(null), new Uint8Array(t.response)
                 } catch (A) {
                     t = tryParseAsDataURI(e);
@@ -98,7 +100,7 @@ var CNTVModule = function() {
                     throw A
                 }
             }), readAsync = function(e, t, r) {
-                var g = new XMLHttpRequest;
+                var g = new privateXMLHttpRequest;
                 g.open("GET", e, !0), g.responseType = "arraybuffer", g.onload = function() {
                     var A;
                     200 == g.status || 0 == g.status && g.response ? t(g.response) : (A = tryParseAsDataURI(e)) ? t(A.buffer) : r()
@@ -2084,8 +2086,8 @@ var CNTVModule = function() {
                     forceLoadFile: function(A) {
                         if (A.isDevice || A.isFolder || A.link || A.contents) return !0;
                         var e = !0;
-                        if ("undefined" != typeof XMLHttpRequest) throw new Error("Lazy loading should have been performed (contents set) in createLazyFile, but it was not. Lazy loading only works in web workers. Use --embed-file or --preload-file in emcc on the main thread.");
-                        if (!read_) throw new Error("Cannot load without read() or XMLHttpRequest.");
+                        if ("undefined" != typeof privateXMLHttpRequest) throw new Error("Lazy loading should have been performed (contents set) in createLazyFile, but it was not. Lazy loading only works in web workers. Use --embed-file or --preload-file in emcc on the main thread.");
+                        if (!read_) throw new Error("Cannot load without read() or privateXMLHttpRequest.");
                         try {
                             A.contents = intArrayFromString(read_(A.url), !0), A.usedBytes = A.contents.length
                         } catch (A) {
@@ -2103,7 +2105,7 @@ var CNTVModule = function() {
                             }, g.prototype.setDataGetter = function(A) {
                                 this.getter = A
                             }, g.prototype.cacheLength = function() {
-                                var A = new XMLHttpRequest;
+                                var A = new privateXMLHttpRequest;
                                 if (A.open("HEAD", C, !1), A.send(null), !(200 <= A.status && A.status < 300 || 304 === A.status)) throw new Error("Couldn't load " + C + ". Status: " + A.status);
                                 var e, r = Number(A.getResponseHeader("Content-length")),
                                     t = (e = A.getResponseHeader("Accept-Ranges")) && "bytes" === e,
@@ -2117,13 +2119,13 @@ var CNTVModule = function() {
                                     if (void 0 === B.chunks[A] && (B.chunks[A] = ((A, e) => {
                                             if (e < A) throw new Error("invalid range (" + A + ", " + e + ") or no bytes requested!");
                                             if (r - 1 < e) throw new Error("only " + r + " bytes available! programmer error!");
-                                            var t = new XMLHttpRequest;
+                                            var t = new privateXMLHttpRequest;
                                             if (t.open("GET", C, !1), r !== g && t.setRequestHeader("Range", "bytes=" + A + "-" + e), "undefined" != typeof Uint8Array && (t.responseType = "arraybuffer"), t.overrideMimeType && t.overrideMimeType("text/plain; charset=x-user-defined"), t.send(null), 200 <= t.status && t.status < 300 || 304 === t.status) return void 0 !== t.response ? new Uint8Array(t.response || []) : intArrayFromString(t.responseText || "", !0);
                                             throw new Error("Couldn't load " + C + ". Status: " + t.status)
                                         })(e, t)), void 0 === B.chunks[A]) throw new Error("doXHR failed!");
                                     return B.chunks[A]
                                 }), !A && r || (g = r = 1, r = this.getter(0).length, g = r, console.log("LazyFiles on gzip forces download of the whole file when length is accessed")), this._length = r, this._chunkSize = g, this.lengthKnown = !0
-                            }, "undefined" != typeof XMLHttpRequest) {
+                            }, "undefined" != typeof privateXMLHttpRequest) {
                             if (!ENVIRONMENT_IS_WORKER) throw "Cannot do synchronous binary XHRs outside webworkers in modern browsers. Use --embed-file or --preload-file in emcc";
                             var B = new g,
                                 B = (Object.defineProperties(B, {
@@ -3121,7 +3123,7 @@ var CNTVModule = function() {
                         Q = Q ? UTF8ToString(Q) : void 0,
                         i = i ? UTF8ToString(i) : void 0,
                         u = s ? UTF8ToString(s) : void 0,
-                        d = new XMLHttpRequest;
+                        d = new privateXMLHttpRequest;
                     if (d.withCredentials = o, d.open(n, A, !I, Q, i), I || (d.timeout = E), d.url_ = A, assert(!w, "streaming uses moz-chunked-arraybuffer which is no longer supported; TODO: rewrite using fetch()"), d.responseType = "arraybuffer", s && d.overrideMimeType(u), a)
                         for (;;) {
                             var M = HEAPU32[a >> 2];
