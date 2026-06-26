@@ -1,6 +1,6 @@
 import * as util from "./util.js";
 
-export { WorkerMessageType, WorkerMessagePayload, WorkerMessage, util };
+export { WorkerMessageType, WorkerMessagePayload, WorkerMessage };
 
 enum WorkerMessageType {
     WANT_DECRYPT_BUFFER, // to worker

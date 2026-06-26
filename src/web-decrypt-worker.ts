@@ -1,6 +1,7 @@
 import * as decrypt from "./decrypt.js";
 import * as cmdutil from "./cmdutil.js";
-import { util, WorkerMessageType, WorkerMessagePayload, WorkerMessage } from "./web-decrypt-worker-type.js";
+import * as util from "./util.js";
+import { WorkerMessageType, WorkerMessagePayload, WorkerMessage } from "./web-decrypt-worker-type.js";
 
 enum DecryptStatus {
     NOT_DECRYPTING,

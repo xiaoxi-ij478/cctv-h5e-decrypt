@@ -13,7 +13,8 @@
             }
         </style>
         <script type="module">
-            import { WorkerMessageType, util } from "./web-decrypt-worker-type.js";
+            import { WorkerMessageType } from "./web-decrypt-worker-type.js";
+            import * as util from "./util.js";
 
             let decryptingBuffer = false, decryptingGUID = false;
             let decryptBuffer = null;
@@ -21,6 +22,7 @@
             let newURL;
             let file, guid;
             let notReallocated = true;
+            let canDecrypt = true;
             const inputFile = document.getElementById("input-file");
             const inputGUID = document.getElementById("input-guid");
             const form = document.getElementById("form");
@@ -29,7 +31,7 @@
             const success = document.getElementById("success");
             const failureReason = document.getElementById("failure-reason");
             const successFileLink = document.getElementById("success-file-link");
-            const decryptWorker = new Worker("web-decrypt-worker.js");
+            const decryptWorker = new Worker("web-decrypt-worker.js", { type: "module" });
 
             function appendLogEntry(message) {
                 document.getElementById("logs").textContent = message;
@@ -42,6 +44,11 @@
             function sendMessage(type, payload = undefined, transferArr = undefined) {
                 decryptWorker.postMessage({ type, payload }, transferArr);
             }
+
+            decryptWorker.addEventListener("error", e => {
+                alert("Worker 初始化时发生错误");
+                canDecrypt = false;
+            });
 
             decryptWorker.addEventListener("message", e => {
                 e = e.data;
@@ -136,6 +143,11 @@
             form.addEventListener("submit", e => {
                 let newBuffer, resolution;
                 e.preventDefault();
+
+                if (!canDecrypt) {
+                    alert("Worker 不可用，无法进行解密");
+                    return;
+                }
 
                 if (decryptingGUID || decryptingBuffer) {
                     alert("已有一个解密任务！");

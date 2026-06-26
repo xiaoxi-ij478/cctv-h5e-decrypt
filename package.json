@@ -40,7 +40,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rm -rf build && diff src/external/cctv.worker.js src/external/cctv.worker.orig.js -u >src/external/cctv.worker.diff; npx tsc && mkdir build/external && cp src/external/cctv.worker.js build/external",
     "bundle": "rm -rf build/final && npx esbuild src/main.ts --sourcemap=linked --bundle --platform=node --format=esm --outfile=build/final/final.js && cd build/final && tar zcvf ../final.tar.gz . && zip -r ../final.zip .",
-    "bundle-web": "rm -rf build/final-web && npx esbuild src/web-decrypt-worker.ts src/web-decrypt-worker-type.ts --sourcemap=linked --bundle --format=esm --outdir=build/final-web/",
+    "bundle-web": "rm -rf build/final-web && npx esbuild src/util.ts src/cmdutil.ts src/web-decrypt-worker.ts src/web-decrypt-worker-type.ts --sourcemap=linked --bundle --format=esm --outdir=build/final-web/ --external:./util.js --external:./cmdutil.js",
     "cp-web": "cp build/final-web/* ../cctv-h5e-decrypt-web/ && cp decrypter.html ../cctv-h5e-decrypt-web/index.html",
     "sync-latest-worker": "TMP=$(mktemp) && curl -qfsS https://player.cntv.cn/h5vod/cctv.worker.js | npx js-beautify -n >$TMP && if cmp \"$TMP\" src/external/cctv.worker.orig.js; then rm -f $TMP; else mv -f \"$TMP\" src/external/cctv.worker.orig.js && echo need to update cctv.worker.js; fi"
   },
