@@ -9,7 +9,7 @@
             }
         </style>
         <script type="module">
-            import { WorkerMessageType, util } from "./build/final-web/web-decrypt-worker-type.js";
+            import { WorkerMessageType, util } from "./web-decrypt-worker-type.js";
 
             let decryptingBuffer = false, decryptingGUID = false;
             let decryptBuffer = null;
@@ -25,7 +25,7 @@
             const success = document.getElementById("success");
             const failureReason = document.getElementById("failure-reason");
             const successFileLink = document.getElementById("success-file-link");
-            const decryptWorker = new Worker("build/final-web/web-decrypt-worker.js");
+            const decryptWorker = new Worker("web-decrypt-worker.js");
 
             function appendLogEntry(message) {
                 document.getElementById("logs").textContent = message;
