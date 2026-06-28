@@ -8,12 +8,16 @@ export {
     checkNumberNotEqual,
     concatUint8Arrays,
     appendUint8Array,
+    allocUint8Array,
     getURLAsUint8Array,
     getURLAsJSON,
     getURLAsText,
     getM3U8FromWebPage,
     getM3U8FromGUID,
-    getTsFromM3U8
+    getTsFromM3U8,
+    TsBufferIterator,
+    TsBufferCountIterator,
+    Queue
 };
 
 function arrayEquals(a: Uint8Array, b: Uint8Array): boolean {
@@ -22,8 +26,6 @@ function arrayEquals(a: Uint8Array, b: Uint8Array): boolean {
         a.every((el, idx) => el === b.at(idx))
     );
 }
-
-const doNotCheckAtAll: boolean = false;
 
 function checkNumberEqual(
     val: number,
@@ -57,11 +59,14 @@ function checkNumberNotEqual(
 // arr: arrays to concat
 // toBuffer: if provided, the existing arraybuffer to append
 //    but if the provided buffer is too small, we'll allocate a new buffer
-function concatUint8Arrays(arr: Uint8Array[], toBuffer?: ArrayBufferLike): Uint8Array {
+function concatUint8Arrays(arr: Uint8Array[], toBuffer?: ArrayBuffer, noRealloc = false): Uint8Array {
     const totalLength = arr.reduce((a, e) => a + e.byteLength, 0);
     let reallocated = false;
 
     if (toBuffer && toBuffer.byteLength < totalLength) {
+        if (noRealloc)
+            throw new Error("buffer size is insufficient and reallocation is disallowed");
+
         reallocated = true;
         toBuffer = new ArrayBuffer(totalLength);
     }
@@ -83,8 +88,12 @@ function concatUint8Arrays(arr: Uint8Array[], toBuffer?: ArrayBufferLike): Uint8
 // append to dst's underlying arraybuffer
 // this may cause a reallocation if dst's arraybuffer is not large enough,
 // so we return the array in case it reallocates
-function appendUint8Array(dst: Uint8Array, src: Uint8Array): Uint8Array {
-    return concatUint8Arrays([dst, src], dst.buffer);
+function appendUint8Array(dst: Uint8Array, src: Uint8Array, noRealloc = false): Uint8Array {
+    return concatUint8Arrays([dst, src], dst.buffer, noRealloc);
+}
+
+function allocUint8Array(size: number): Uint8Array {
+    return new Uint8Array(new ArrayBuffer(allocSize), 0, 0);
 }
 
 async function getURLAsUint8Array(url: string | URL, fetchOptions?: RequestInit): Promise<Uint8Array> {
@@ -136,18 +145,18 @@ async function getM3U8FromGUID(guid: string, resolution: number, fetchOptions?: 
         throw new Error("resolution not integer");
 
     cmdutil.log(`got guid "${guid}"`);
-    type VideoInfoType = { manifest: { hls_h5e_url: string }, ack: string };
     const videoInfo = await getURLAsJSON(
         `https://vdn.apps.cntv.cn/api/getHttpVideoInfo.do?pid=${guid}`,
         fetchOptions
-    ) as VideoInfoType;
+    ) as { manifest: { hls_h5e_url: string }, ack: string };
 
     if (videoInfo.ack === "no")
         throw new Error(`invalid guid "${guid}"`);
 
     const ret = videoInfo.manifest.hls_h5e_url.replace(/main/g, resolution.toString()).replace(/\?.*/, "");
     cmdutil.log(`got link "${ret}"`);
-    return ret;
+    // return ret;
+    return `https://dh5wswx02.v.cntv.cn/asp/h5e/hls/${resolution}/0303000a/3/default/${guid}/${resolution}.m3u8`;
 }
 
 class Queue<T> {
@@ -181,17 +190,26 @@ class Queue<T> {
     }
 }
 
-async function backgroundFetcher(urls: [string, string][], queue: Queue<Uint8Array>): Promise<void> {
-    for (const i in urls)
-        await queue.put(await getURLAsUint8Array(new URL(urls[i][0], urls[i][1])));
-}
+interface TsBufferIterator {
+    buffer: Uint8Array;
+};
 
-async function *getTsFromM3U8(url: string, fetchOptions?: RequestInit): AsyncGenerator<[Uint8Array, number]> {
+interface TsBufferCountIterator extends TsBufferIterator {
+    currentSlice: number;
+    totalSlice: number;
+};
+
+async function *getTsFromM3U8(url: string, fetchOptions?: RequestInit): AsyncGenerator<TsBufferCountIterator> {
+    async function backgroundFetcher(urls: URL[], queue: Queue<Uint8Array>): Promise<void> {
+        for (const i of urls)
+            await queue.put(await getURLAsUint8Array(i));
+    }
+
     const m3u8Content = await getURLAsText(url, fetchOptions);
     const queue = new Queue<Uint8Array>;
-    const urls: [string, string][] = m3u8Content.split(/\n/).filter(l => l && !l.match(/^#/)).map(e => [e, url]);
+    const urls = m3u8Content.split(/\n/).filter(l => l && !l.match(/^#/)).map(e => new URL(e, url));
     backgroundFetcher(urls, queue);
 
     for (let i = 0; i < urls.length; i++)
-        yield [await queue.get(), urls.length];
+        yield [await queue.get(), i, urls.length];
 }

@@ -13,58 +13,61 @@
 
 现在已经有一个简便的网页版可用了：<https://cctv-decrypt.xiaoxi-ij478.com>
 
-不过网页版需要手动获取 GUID。
+网页版支持直接解密和 GUID 解密法。
 
 ## 使用方法
 
+**注意！解密大于 2 GiB 的视频不能使用命令行版以及网页版的文件解密模式！**
+
 首先，安装 node 运行时环境，参见 "[Node.js — 下载 Node.js®](https://nodejs.org/zh-cn/download)"。
 
-然后下载仓库，执行
+然后下载仓库，可选择以下几种方式执行：
 
-```bash
-npx tsx <仓库路径>/src/main.ts --get-m3u8 <你获取到的 m3u8 链接> <解密后文件>.ts
-```
-
-或者
-
-```bash
-npx tsx <仓库路径>/src/main.ts --get-guid <码率> <视频网页链接> <解密后文件>.ts
-```
+- `npx tsx <仓库路径>/src/main.ts --local-m3u8 <*本地* m3u8 文件> <解密后文件>.ts`
+- `npx tsx <仓库路径>/src/main.ts --get-guid <码率> <视频网页链接> <解密后文件>.ts`
+- `npx tsx <仓库路径>/src/main.ts --get-m3u8 <m3u8 链接> <解密后文件>.ts`
+- `npx tsx <仓库路径>/src/main.ts <ts 文件> <解密后文件>.ts`
 
 就可以解密了。
 
 ### 参数
 
-为了简化操作流程，main.ts 支持直接提供视频网页链接获取 M3U8 进行解密。这种方法需要添加 `--get-guid` 参数。
-也支持直接从 M3U8 直链获取 .ts 文件进行解密。这种方法需要添加 `--get-m3u8` 参数。
+目前 main.ts 支持四种模式：
 
-其中，guid 方式需要你选择码率。除了央视 4K 频道以外，所有使用央视加密方法的网站几乎都有四种码率（分辨率均为 720p）：
+- 文件解密
+- m3u8 链接解密
+- 视频网页解密
+- 本地 m3u8 解密
 
-- 450
-- 850
-- 1200
-- 2000
+其中：
 
-而 4K 频道只有两种码率：
+- 视频网页解密方式需要你选择码率。除了央视 4K 频道以外，所有使用央视加密方法的网站几乎都有四种码率（分辨率均为 720p）
+  
+  - 450
+  - 850
+  - 1200
+  - 2000
+  
+  而 4K 频道只有两种码率：2000（720p）
+  
+  - 2000（720p）
+  - 4000（1080p）
 
-- 2000（720p）
-- 4000（1080p）
+- m3u8 链接解密需要手动获取 m3u8 链接，可以用 https://github.com/WeaponJang/get-cntv-guid 的脚本。
 
-根据你的需要选择码率。
+- 本地 m3u8 解密适用于超大 ts 解密。如果直接解密大 ts，解析将会花费超级长的时间。所以可以事先下载 m3u8 和分片后再解密。具体方法见下。
 
-如果你发现一个奇怪的网站有不同于以上两种情况的码率，使用 <https://zhuanlan.zhihu.com/p/672745032> 的方法手动获取 m3u8 链接，然后使用 `--get-m3u8` 方式下载。
+- 文件解密很简单，就是解密给定的 ts。这种方法适用于小型 ts (<= 100 MiB)。
 
-当然，如果你已经下载了 .ts 或者就想自己动手，那么也可以手动传原始 .ts 和解密后 .ts 的文件名进行本地解密。
+### 如何制作本地 m3u8
 
-注意！不要一次性解密过大的 .ts，否则解密速度会超级慢（因为解析 ts 包需要耗费大量内存）。
+建立一个文件夹，然后获取 m3u8 链接，下载 m3u8 和它所指定的所有切片。网上有很多的教程。**不过不要合并切片！只需要下载分片即可！**然后执行 `npx tsx <仓库路径>/src/main.ts --local-m3u8 <*本地* m3u8 文件> <解密后文件>.ts` 即可解密。
 
-### 作为库使用
+## 作为库使用
 
 （npm 上发布包还要启用 2FA，我不想为此买个什么安全密钥，等我搞定了以后再说）
 
 这个示例程序下载命令行给定的所有视频，码率选定为 2000。
-
-（对，其实这个就是我写的 main.ts 的一个极简版）
 
 ```ts
 import * as process from "node:process";
@@ -93,6 +96,16 @@ main();
 
 ## misc.
 
-这种解密方式相对于另一种解密方式（cbox.exe）非常慢，但是那种方法没有 Linux 版（忽略 wine），且不开源。如果你介意速度，那就用cbox（[cctv视频下载解密 - 吾爱破解 - 52pojie.cn](https://www.52pojie.cn/forum.php?mod=viewthread&tid=2052017)）。
+这种解密方式相对于另一种解密方式（cbox.exe）非常慢，但是那种方法没有 Linux 版（忽略 wine），且不开源。如果你介意速度，那就用 cbox（[cctv视频下载解密 - 吾爱破解 - 52pojie.cn](https://www.52pojie.cn/forum.php?mod=viewthread&tid=2052017)）。
 
-[videodl](https://github.com/CharlesPikachu/videodl) 是一个多功能视频下载器，集成了我的脚本以下载 CCTV 上的视频。
+@WeaponJang 开发了一个使用这个项目的网页解密器，参见 https://github.com/WeaponJang/cctv-video-guid
+
+[videodl](https://github.com/CharlesPikachu/videodl) 是一个多功能视频下载器，集成了这个项目（其实是早期单脚本的版本）。
+
+### 压力测试
+
+为了测试本项目解密超大视频的能力，以下是一些长视频的链接，可供使用：
+
+- [《CCTV空中剧院》 20260411 京剧《宋士杰》](https://tv.cctv.com/2026/04/11/VIDEOgcuDyCs76oQ9oOUBDOO260411.shtml)（02:50:20，c93c7996af53415e9e1412521e131a7a）
+- [《CCTV空中剧院》 20260618 京剧《龙凤呈祥》](https://tv.cctv.com/2026/06/18/VIDEhb0EDRgXPa9cVcrp3fLV260618.shtml)（02:36:20，1629bae302304ca9b6467ae1931f425a）
+- [《CCTV空中剧院》 20260621 越剧《春香传》](https://tv.cctv.com/2026/06/21/VIDElmVzKgjHSGS493QFV4JV260621.shtml)（02:17:50，043732250b304099a3e8ee245400bc89）

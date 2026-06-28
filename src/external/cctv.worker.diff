@@ -1,5 +1,5 @@
---- src/external/cctv.worker.js	2026-06-26 22:10:33.855772205 +0800
-+++ src/external/cctv.worker.orig.js	2026-06-14 23:17:34.927179747 +0800
+--- src/external/cctv.worker.js
++++ src/external/cctv.worker.orig.js
 @@ -1,60 +1,7 @@
  /* 2026-05-12 18:20:40  4f63a66bf8e9c0c825f898b5c1015373 */
  console.debug('CCTV_Woker_BTime', '2026-05-12 18:20:40');

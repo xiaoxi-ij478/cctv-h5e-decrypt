@@ -38,12 +38,12 @@ abstract class MPEGTSPacketBase {
 }
 
 class MPEGTSPacketHeader extends MPEGTSPacketBase {
-    isContinuePacket: boolean = false;
-    hasAdaptationControl: boolean = false;
-    hasPayload: boolean = false;
-    continuityCount: number = 0;
-    transportPriority: number = 0;
-    pid: number = 0;
+    isContinuePacket = false;
+    hasAdaptationControl = false;
+    hasPayload = false;
+    continuityCount = 0;
+    transportPriority = 0;
+    pid = 0;
 
     constructor();
     constructor(data: Uint8Array);
@@ -89,7 +89,7 @@ class MPEGTSPacketHeader extends MPEGTSPacketBase {
 }
 
 class MPEGTSPacketAdaptationField extends MPEGTSPacketBase {
-    payloadLength: number = 0;
+    payloadLength = 0;
     payload: Uint8Array | null = null;
 
     constructor();
@@ -123,7 +123,7 @@ class MPEGTSPacketAdaptationField extends MPEGTSPacketBase {
 }
 
 class MPEGTSPacket extends MPEGTSPacketBase {
-    header: MPEGTSPacketHeader = new MPEGTSPacketHeader;
+    header = new MPEGTSPacketHeader;
     adaptationField: MPEGTSPacketAdaptationField | null = null;
     payload: Uint8Array | null = null;
 
@@ -178,12 +178,12 @@ class MPEGTSPacket extends MPEGTSPacketBase {
 // if you're familiar with reset() and reinit(),
 // that's because I copied them from MPEGTSPacketBase :)
 abstract class MPEGTSPESPacketBase {
-    protected currentCounter: number = 0;
-    protected buffer: Uint8Array = new Uint8Array;
-    protected remainingLength: number = 0; // expected to be set by subclasses
-    initialized: boolean = false;
-    complete: boolean = false;
-    pid: number = 0;
+    protected currentCounter = 0;
+    protected buffer = new Uint8Array;
+    protected remainingLength = 0; // expected to be set by subclasses
+    initialized = false;
+    complete = false;
+    pid = 0;
 
     protected abstract get requiredBytes(): number;
     protected abstract realInit(): void;
@@ -313,8 +313,8 @@ type MPEGTSPATPIDMapping = {
 }
 
 class MPEGTSPAT extends MPEGTSPSIPacketBase {
-    private crc32obj: jsCrc.Crc = jsCrcModels.default.crc_32_mpeg_2.create();
-    transportStreamID: number = 0;
+    private crc32obj = jsCrcModels.default.crc_32_mpeg_2.create();
+    transportStreamID = 0;
     programPMTPIDMapping: MPEGTSPATPIDMapping[] = [];
 
     constructor();
@@ -404,7 +404,7 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
             4 * this.programPMTPIDMapping.length // pmt pid mapping length
         );
         if (!disableIntegrityCheck && sectionLength > 0x3FD)
-                throw new Error("section length greater than 1021");
+            throw new Error("section length greater than 1021");
 
         const crc32obj: jsCrc.Crc = jsCrcModels.default.crc_32_mpeg_2.create();
         let dataToCRC: Uint8Array = Uint8Array.of(
@@ -439,10 +439,10 @@ type MPEGTSPMTStreamInfo = {
 };
 
 class MPEGTSPMT extends MPEGTSPSIPacketBase {
-    private crc32obj: jsCrc.Crc = jsCrcModels.default.crc_32_mpeg_2.create();
-    assocProgram: number = 0;
-    pcrpid: number = 0;
-    descriptor: Uint8Array = new Uint8Array;
+    private crc32obj = jsCrcModels.default.crc_32_mpeg_2.create();
+    assocProgram = 0;
+    pcrpid = 0;
+    descriptor = new Uint8Array;
     streams: MPEGTSPMTStreamInfo[] = [];
 
     constructor();
@@ -586,15 +586,15 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
 }
 
 class MPEGTSPES extends MPEGTSPESPacketBase {
-    streamID: number = 0;
+    streamID = 0;
     // NOTE! pts and dts are 33-bit unsigned integers so they must be stored as BigInts
-    // pts: BigInt = 0n;
-    // dts: BigInt = 0n;
-    // hasPTS: boolean = false;
-    // hasDTS: boolean = false;
-    header: Uint8Array = new Uint8Array;
-    payload: Uint8Array = new Uint8Array;
-    payloadStartOffset: number = 0;
+    // pts = 0n;
+    // dts = 0n;
+    // hasPTS = false;
+    // hasDTS = false;
+    header = new Uint8Array;
+    payload = new Uint8Array;
+    payloadStartOffset = 0;
 
     constructor();
     constructor(data: MPEGTSPacket);
@@ -620,7 +620,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
             this.remainingLength = -1;
 
         // if the size is undefined it must be at least 1 MiB, so we allocate 1 MiB
-        this.payload = new Uint8Array(new ArrayBuffer(this.remainingLength === -1 ? (1 << 20) : this.remainingLength), 0, 0);
+        this.payload = util.allocUint8Array(this.remainingLength === -1 ? (1 << 20) : this.remainingLength);
         this.header = this.buffer.subarray(0, 6);
         this.buffer = this.buffer.subarray(6);
 
@@ -744,7 +744,7 @@ type MPEGTSPMTProgramAssoc = {
 
 // the super class representating a whole TS
 class MPEGTS {
-    // pat: MPEGTSPAT = new MPEGTSPAT;
+    // pat = new MPEGTSPAT;
     // pmts: MPEGTSPMTProgramAssoc[] = [];
     packets: MPEGTSPacket[] = [];
 
@@ -834,22 +834,36 @@ class MPEGTS {
             if (pid === pmtPID)
                 return pmt;
 */
+        // do two pass to speed up pes packet merge
+        // first pass: just create pes packet without updating
         for (const packetIndex in this.packets) {
             let packet = this.packets[packetIndex];
 
             if (packet.header.pid !== pid)
                 continue;
 
-            if (!ret.length || !packet.header.isContinuePacket) {
+            if (!packet.header.isContinuePacket)
                 ret.push({
                     pes: new MPEGTSPES(packet),
                     indexes: [Number(packetIndex)]
                 });
+        }
 
-            } else {
-                ret.at(-1)!.pes.update(packet);
-                ret.at(-1)!.indexes.push(Number(packetIndex));
+        // second pass: actual update, use s as the current packet index
+        let s = -1;
+        for (const packetIndex in this.packets) {
+            let packet = this.packets[packetIndex];
+
+            if (packet.header.pid !== pid)
+                continue;
+
+            if (!packet.header.isContinuePacket) {
+                s++;
+                continue;
             }
+
+            ret[s]!.pes.update(packet);
+            ret[s]!.indexes.push(Number(packetIndex));
         }
 
         return ret;
