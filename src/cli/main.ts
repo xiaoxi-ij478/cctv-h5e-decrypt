@@ -21,12 +21,13 @@ async function *getTsFromM3U8File(
         queue: util.Queue<Uint8Array<ArrayBuffer>>
     ): Promise<void> {
         for (const i in urls) {
+            await queue.put(await fsPromises.readFile(urls[i]));
+
             queueCallback?.({
                 currentSlice: Number(i),
                 currentSize: queue.currentSize,
                 maxSize: queue.maxSize
             });
-            await queue.put(await fsPromises.readFile(urls[i]));
         }
     }
 
@@ -39,12 +40,19 @@ async function *getTsFromM3U8File(
         .map(e => path.join(path.dirname(filename), e));
     backgroundFetcher(urls, queue);
 
-    for (const i in urls)
+    for (const i in urls) {
         yield {
             buffer: await queue.get(),
             currentSlice: Number(i),
             totalSlice: urls.length
         };
+
+        queueCallback?.({
+            currentSlice: null,
+            currentSize: queue.currentSize,
+            maxSize: queue.maxSize
+        });
+    }
 }
 
 function usage(): never {
@@ -165,7 +173,10 @@ async function main(): Promise<void> {
             const { buffer, currentSlice, totalSlice } of
             util.getTsFromM3U8(
                 process.argv[2],
-                e => cmdutil.log(`downloading slice ${e.currentSlice}.ts...`),
+                e => {
+                    if (e.currentSlice !== null)
+                    cmdutil.log(`downloading slice ${e.currentSlice}.ts...`)
+                },
                 cacheSlice
             )
         ) {
@@ -185,7 +196,10 @@ async function main(): Promise<void> {
             const { buffer, currentSlice, totalSlice } of
             util.getTsFromM3U8(
                 await util.getM3U8FromWebPage(process.argv[2], guidResolution),
-                e => cmdutil.log(`downloading slice ${e.currentSlice}.ts...`),
+                e => {
+                    if (e.currentSlice !== null)
+                    cmdutil.log(`downloading slice ${e.currentSlice}.ts...`)
+                },
                 cacheSlice
             )
         ) {
@@ -205,7 +219,10 @@ async function main(): Promise<void> {
             const { buffer, currentSlice, totalSlice } of
             getTsFromM3U8File(
                 process.argv[2],
-                e => cmdutil.log(`downloading slice ${e.currentSlice}.ts...`),
+                e => {
+                    if (e.currentSlice !== null)
+                    cmdutil.log(`downloading slice ${e.currentSlice}.ts...`)
+                },
                 cacheSlice
             )
         ) {

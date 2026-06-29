@@ -212,7 +212,7 @@ interface TsBufferCountIterator extends TsBufferIterator {
 };
 
 interface QueueStatus {
-    currentSlice: number;
+    currentSlice: number | null;
     currentSize: number;
     maxSize: number;
 }
@@ -225,12 +225,13 @@ async function *getTsFromM3U8(
 ): AsyncGenerator<TsBufferCountIterator> {
     async function backgroundFetcher(urls: URL[], queue: Queue<Uint8Array<ArrayBuffer>>): Promise<void> {
         for (const i in urls) {
+            await queue.put(await getURLAsUint8Array(urls[i]));
+
             queueCallback?.({
                 currentSlice: Number(i),
                 currentSize: queue.currentSize,
                 maxSize: queue.maxSize
             });
-            await queue.put(await getURLAsUint8Array(urls[i]));
         }
     }
 
@@ -243,10 +244,17 @@ async function *getTsFromM3U8(
         .map(e => new URL(e, url));
     backgroundFetcher(urls, queue);
 
-    for (const i in urls)
+    for (const i in urls) {
         yield {
             buffer: await queue.get(),
             currentSlice: Number(i),
             totalSlice: urls.length
         };
+
+        queueCallback?.({
+            currentSlice: null,
+            currentSize: queue.currentSize,
+            maxSize: queue.maxSize
+        });
+    }
 }

@@ -135,7 +135,9 @@ form.addEventListener("submit", async e => {
                     ),
                     e => {
                         setBufferStatus(`${e.currentSize} / ${e.maxSize}`);
-                        cmdutil.log(`downloading slice ${e.currentSlice}.ts...`);
+
+                        if (e.currentSlice !== null)
+                            cmdutil.log(`downloading slice ${e.currentSlice}.ts...`);
                     },
                     Number(maxBufferSlice.value) ?? 10
                 )
