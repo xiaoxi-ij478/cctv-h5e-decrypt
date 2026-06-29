@@ -16,7 +16,10 @@ const inputGUID = document.getElementById("input-guid") as HTMLInputElement;
 const maxBufferSlice = document.getElementById("max-buffer-slices") as HTMLInputElement;
 const form = document.getElementById("form") as HTMLFormElement;
 const logs = document.getElementById("logs") as HTMLElement;
-const tsBufferStatus = document.getElementById("tsbuffer-status") as HTMLElement;
+const tsBufferStatus = document.getElementById("tsbuffer-status") as HTMLProgressElement;
+const decryptStatus = document.getElementById("decrypt-status") as HTMLProgressElement;
+const tsBufferStatusText = document.getElementById("tsbuffer-status-text") as HTMLElement;
+const decryptStatusText = document.getElementById("decrypt-status-text") as HTMLElement;
 const failure = document.getElementById("failure") as HTMLElement;
 const success = document.getElementById("success") as HTMLElement;
 const failureReason = document.getElementById("failure-reason") as HTMLElement;
@@ -37,12 +40,28 @@ function clearLogEntry(): void {
     logs.textContent = "";
 }
 
-function setBufferStatus(message: string): void {
-    tsBufferStatus.textContent = message;
+function setBufferStatus(current: number, total: number): void {
+    tsBufferStatus.value = current;
+    tsBufferStatus.max = total;
+    tsBufferStatusText.textContent = `${current} / ${total}`;
 }
 
 function clearBufferStatus(): void {
-    tsBufferStatus.textContent = "";
+    tsBufferStatus.value = 0;
+    tsBufferStatus.max = 1;
+    tsBufferStatusText.textContent = "";
+}
+
+function setDecryptStatus(current: number, total: number): void {
+    decryptStatus.value = current;
+    decryptStatus.max = total;
+    decryptStatusText.textContent = `${current} / ${total}`;
+}
+
+function clearDecryptStatus(): void {
+    decryptStatus.value = 0;
+    decryptStatus.max = 1;
+    decryptStatusText.textContent = "";
 }
 
 function resetStatus(): void {
@@ -68,6 +87,7 @@ function setFailure(reason: string): void {
 function reset(): void {
     clearLogEntry();
     clearBufferStatus();
+    clearDecryptStatus();
     failure.classList.add("nodisplay");
     success.classList.add("nodisplay");
     resetStatus();
@@ -133,7 +153,7 @@ form.addEventListener("submit", async e => {
                         Number(new FormData(form).get("resolution"))
                     ),
                     e => {
-                        setBufferStatus(`${e.currentSize} / ${e.maxSize}`);
+                        setBufferStatus(e.currentSize, e.maxSize);
 
                         if (e.currentSlice !== null)
                             cmdutil.log(`downloading slice ${e.currentSlice}.ts...`);
@@ -141,7 +161,9 @@ form.addEventListener("submit", async e => {
                     Number(maxBufferSlice.value) ?? 10
                 )
             ) {
+                setDecryptStatus(currentSlice, totalSlice - 1);
                 cmdutil.log(`decrypting slice ${currentSlice}.ts...`);
+
                 let decBuf = await decryptWorkerWrapper.decryptTsBuffer(buffer);
 
                 if (

@@ -57,11 +57,20 @@
                 <button id="start-decrypt">开始解密</button>
             </form>
 
-            <h2>日志：</h2>
-            <section>ts 缓冲切片数：<span id="tsbuffer-status"></span></section>
+            <h2>日志</h2>
             <section id="logs"></section>
             <section id="success" class="nodisplay">文件解密成功。<a id="success-file-link">点击下载</a></section>
             <section id="failure" class="nodisplay">文件解密失败。原因：<span id="failure-reason"></span></section>
+            <section>
+                ts 缓冲切片数：
+                <span id="tsbuffer-status-text"></span>
+                <progress id="tsbuffer-status" value="0"></progress>
+            </section>
+            <section>
+                已解密切片数：
+                <span id="decrypt-status-text"></span>
+                <progress id="decrypt-status" value="0"></progress>
+            </section>
         </article>
     </body>
 </html>
