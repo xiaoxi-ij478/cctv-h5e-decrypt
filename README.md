@@ -120,7 +120,7 @@ main();
 
 这种解密方式相对于另一种解密方式（cbox.exe）非常慢，但是那种方法没有 Linux 版（忽略 wine），且不开源。如果你介意速度，那就用 cbox（[cctv视频下载解密 - 吾爱破解 - 52pojie.cn](https://www.52pojie.cn/forum.php?mod=viewthread&tid=2052017)）。
 
-@WeaponJang 开发了一个使用这个项目的网页解密器，如果你觉得我的 html 比较丑~~（肯定会）~~可以用这个，参见 https://github.com/WeaponJang/cctv-video-guid
+@WeaponJang 开发了一个使用这个项目的网页解密器，如果你觉得我的 html 比较丑 ~~（肯定会）~~ 可以用这个，参见 https://github.com/WeaponJang/cctv-video-guid
 
 [videodl](https://github.com/CharlesPikachu/videodl) 是一个多功能视频下载器，集成了这个项目（其实是早期单脚本的版本）。
 
