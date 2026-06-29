@@ -73,19 +73,31 @@
 这个示例程序下载命令行给定的所有视频，码率选定为 2000。
 
 ```ts
-import * as process from "node:process";
 import * as fsPromises from "node:fs/promises";
 import * as path from "node:path";
 
-import * as workerWrapper from "cctv-h5e-decrypt/worker-wrapper";
-import * as workerType from "cctv-h5e-decrypt/worker/worker-type";
+import * as workerWrapper from "cctv-h5e-decrypt/worker/wrapper";
 
 async function main() {
     const decrypter = new workerWrapper.DecryptWorkerWrapper;
 
     await decrypter.startDecrypt();
     for (const url of process.argv.slice(2))
-        for await (const { buffer } of decryptUtil.getTsFromM3U8(await decryptUtil.getM3U8FromWebPage(url, 2000)))
+        for await (
+            const {
+                buffer, // ts 缓冲区
+                currentSlice, // 当前获取的切片号（0 开始）
+                totalSlice // 总计切片数量
+            } of decryptUtil.getTsFromM3U8(
+                await decryptUtil.getM3U8FromWebPage(url, 2000),
+                e => {
+                    // e.currentSlice -> 当前下载的切片号（0 开始）
+                    // e.currentSize -> 当前缓冲区大小
+                    // e.maxSize -> 缓冲区最大大小
+                },
+                10 // 缓冲区最大大小
+            )
+        )
             await fsPromises.writeFile(
                 `${path.basename(url)}.ts`,
                 await decrypter.decryptTsBuffer(buffer),
@@ -93,6 +105,7 @@ async function main() {
             );
 
     await decrypter.endDecrypt();
+    await decrypter.terminate(); // 若解密器不再使用，务必要执行 terminate()，否则残留的 worker 会造成 node 无法退出
 }
 
 main();
