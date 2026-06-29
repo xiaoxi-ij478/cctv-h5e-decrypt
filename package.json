@@ -42,7 +42,7 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "rm -rf build && diff src/external/cctv.worker.js src/external/cctv.worker.orig.js -u | sed '1,2s/\\t.*//' >src/external/cctv.worker.diff; npx tsc && mkdir build/external && cp src/external/cctv.worker.js build/external",
+    "build": "rm -rf build && diff src/external/cctv.worker.orig.js src/external/cctv.worker.js -u | sed '1,2s/\\t.*//' >src/external/cctv.worker.diff; npx tsc && mkdir build/external && cp src/external/cctv.worker.js build/external",
     "bundle": "rm -rf build/final && npx esbuild src/cli/main.ts src/worker/worker.ts --sourcemap=linked --bundle --platform=node --format=esm --outdir=build/final/ && cd build/final && mv cli/* worker/* . && rmdir cli worker && tar zcvf ../final.tar.gz . && zip -r ../final.zip .",
     "bundle-web": "rm -rf build/final-web && npx esbuild src/web/web-decrypt-script.ts src/worker/worker.ts --sourcemap=linked --bundle --format=esm --outdir=build/final-web/ --external:node:*",
     "cp-web": "rm -rf ../cctv-h5e-decrypt-web/js && mkdir -p ../cctv-h5e-decrypt-web/js/external && cp -r build/final-web/* ../cctv-h5e-decrypt-web/js/ && cp src/external/cctv.worker.js ../cctv-h5e-decrypt-web/js/external/ && cp decrypter.html ../cctv-h5e-decrypt-web/index.html",
