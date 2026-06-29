@@ -1,79 +1,60 @@
 "use strict";
 
-import { WorkerMessageType, WorkerMessagePayload, WorkerMessage } from "./decrypt-worker-type.js";
-import * as util from "../util.js";
-import * as cmdutil from "../cmdutil.js";
+import * as util from "#/util.js";
+import * as cmdutil from "#/cmdutil.js";
+import * as workerWrapper from "#/worker/wrapper.js";
+import * as workerType from "#/worker/worker-type.js";
 
 // 1 GiB per ts chunk (anything larger will cause firefox to choke on download)
-const MAX_TS_CHUNK_SIZE = 1073741824; 
-const MAX_TS_FILE_SIZE = 2147483647; 
+const MAX_TS_CHUNK_SIZE = 1073741824;
+const MAX_TS_FILE_SIZE = 2147483647;
 
-let decrypting = false;
-let decryptBuffers: Uint8Array[] = [];
-let inputBuffer: Uint8Array | null = null;
 let newURL: string | null = null;
-let filename: string | null = null;
 let canDecrypt = true;
-let currentSlice: number | null = null, totalSlice: number | null = null;
-let estimatedPerSliceSize: number | null = null;
-let tsBufferIterator: AsyncGenerator<util.TsBufferIterator> | null = null;
 const inputFile = document.getElementById("input-file") as HTMLInputElement;
 const inputGUID = document.getElementById("input-guid") as HTMLInputElement;
 const form = document.getElementById("form") as HTMLFormElement;
 const logs = document.getElementById("logs") as HTMLElement;
+const tsBufferStatus = document.getElementById("tsbuffer-status") as HTMLElement;
 const failure = document.getElementById("failure") as HTMLElement;
 const success = document.getElementById("success") as HTMLElement;
 const failureReason = document.getElementById("failure-reason") as HTMLElement;
 const successFileLink = document.getElementById("success-file-link") as HTMLAnchorElement;
-const decryptWorker = new Worker("js/web/web-decrypt-worker.js", { type: "module" });
+const decryptWorkerWrapper = new workerWrapper.DecryptWorkerWrapper(
+    "js/worker/worker.js",
+    e => {
+        alert("Worker 出现错误");
+        console.error(e);
+        canDecrypt = false;
+    }
+);
 
-function appendLogEntry(message: string) {
+function setLogEntry(message: string): void {
     logs.textContent = message;
 }
 
-function clearLogEntry() {
+function clearLogEntry(): void {
     logs.textContent = "";
 }
 
-function pushNextBuffer(): void {
-    tsBufferIterator.next().then(r => {
-        if (r.done) {
-            sendMessage(WorkerMessageType.FINISH_DECRYPT);
-            newURL = URL.createObjectURL(new Blob(decryptBuffers.map(e => e.buffer as ArrayBuffer)));
-            setSuccess(newURL, filename!);
-            return;
-        }
+function setBufferStatus(message: string): void {
+    tsBufferStatus.textContent = message;
+}
 
-        currentSlice = r.value.currentSlice ?? null;
-        totalSlice = r.value.totalSlice ?? null;
-        if (currentSlice !== null)
-            cmdutil.log(`decrypting slice ${currentSlice}.ts...`);
-
-        sendMessage(
-            WorkerMessageType.PUSH_WORKER_ENCRYPTED_BUFFER,
-            { buffer: r.value.buffer },
-            [r.value.buffer.buffer as ArrayBuffer]
-        );
-    }).catch(e => {
-        sendMessage(WorkerMessageType.FINISH_DECRYPT);
-        setFailure(e);
-    });
+function clearBufferStatus(): void {
+    tsBufferStatus.textContent = "";
 }
 
 function resetStatus(): void {
-    decryptStatus = DecryptStatus.NOT_DECRYPTING;
-    decryptBuffers = [];
-    filename = null;
-    inputBuffer = null;
-    tsBufferIterator = null;
-    estimatedPerSliceSize = -1;
+    // newURL is set only when success,
+    // and will be reset (and revoked) before every decrypt session
 }
 
 function setSuccess(filelink: string, filename: string): void {
     success.classList.remove("nodisplay");
     failure.classList.add("nodisplay");
-    successFileLink.href = newURL;
-    successFileLink.download = `${filename}.ts`;
+    successFileLink.href = newURL = filelink;
+    successFileLink.download = filename;
     resetStatus();
 }
 
@@ -86,88 +67,32 @@ function setFailure(reason: string): void {
 
 function reset(): void {
     clearLogEntry();
+    clearBufferStatus();
     failure.classList.add("nodisplay");
     success.classList.add("nodisplay");
     resetStatus();
 }
 
-function sendMessage(type: WorkerMessageType, payload?: WorkerMessagePayload, transferArr: Transferable[] = []): void {
-    decryptWorker.postMessage({ type, payload }, transferArr);
-}
-
-decryptWorker.addEventListener("error", () => {
-    alert("Worker 初始化时发生错误");
-    canDecrypt = false;
-});
-
-decryptWorker.addEventListener("message", (e: MessageEvent): void => {
-    const d = e.data as WorkerMessage;
-
-    switch (d.type) {
-        case WorkerMessageType.WANT_DECRYPT:
-        case WorkerMessageType.PUSH_WORKER_ENCRYPTED_BUFFER:
-        case WorkerMessageType.FINISH_DECRYPT:
-            cmdutil.error("this message is not intended to be sent to the browser");
+cmdutil.setLogFunc((type, message) => {
+    switch (type) {
+        case cmdutil.LogType.DEBUG:
             break;
 
-        case WorkerMessageType.CAN_PUSH_ENCRYPTED_BUFFER:
-            appendLogEntry("提示：decrypting...");
-            pushNextBuffer();
+        case cmdutil.LogType.LOG:
+            setLogEntry(`提示：${message}`);
             break;
 
-        case WorkerMessageType.PUSH_MAIN_THREAD_DECRYPTED_BUFFER: {
-            const p = d.payload as { buffer: Uint8Array };
-
-            // two situations to allocate new buffer:
-            // 1. at start, preallocate buffer to prevent from reallocation
-            // use the first slice's size as reference
-            // 2. when the last buffer is going to overflow, allocate new one
-            // and put the decrypted ts into the new buffer
-            if (!decryptBuffers.length || decryptBuffers.at(-1)!.byteLength + p.buffer.byteLength > MAX_TS_CHUNK_SIZE) {
-                const size = p.buffer.byteLength;
-                let allocSize = Math.min(size, MAX_TS_CHUNK_SIZE);
-                if (totalSlice !== null && currentSlice !== null) {
-                    if (!decryptBuffers.length)
-                        estimatedPerSliceSize = p.buffer.byteLength;
-
-                    allocSize = Math.min(estimatedPerSliceSize * (totalSlice - currentSlice), MAX_TS_CHUNK_SIZE);
-                }
-
-                while (size > MAX_TS_CHUNK_SIZE) {
-                    const buf = util.allocUint8Array(allocSize);
-                    util.appendUint8Array(buf, p.buffer, true);
-                    decryptBuffers.push(buf);
-                    size -= allocSize;
-                }
-            } else
-                decryptBuffers[decryptBuffers.length - 1]! = util.appendUint8Array(decryptBuffers.at(-1)!, p.buffer);
-
-            pushNextBuffer();
-            break;
-        }
-
-        case WorkerMessageType.DECRYPT_ERROR:
-            setFailure((d.payload as { message: any }).message);
+        case cmdutil.LogType.WARN:
+            setLogEntry(`警告：${message}`);
             break;
 
-        case WorkerMessageType.REPORT_DEBUG:
-            break;
-
-        case WorkerMessageType.REPORT_LOG:
-            appendLogEntry(`提示：${(d.payload as { message: any }).message}`);
-            break;
-
-        case WorkerMessageType.REPORT_WARN:
-            appendLogEntry(`警告：${(d.payload as { message: any }).message}`);
-            break;
-
-        case WorkerMessageType.REPORT_ERROR:
-            appendLogEntry(`错误：${(d.payload as { message: any }).message}`);
+        case cmdutil.LogType.ERROR:
+            setLogEntry(`错误：${message}`);
             break;
     }
 });
 
-form.addEventListener("submit", e => {
+form.addEventListener("submit", async e => {
     e.preventDefault();
 
     if (!canDecrypt) {
@@ -175,13 +100,8 @@ form.addEventListener("submit", e => {
         return;
     }
 
-    if (decryptStatus !== DecryptStatus.NOT_DECRYPTING) {
-        alert("已有一个解密任务！");
-        return;
-    }
-
-    file = inputFile.files?.[0] ?? null;
-    guid = inputGUID.value;
+    const file = inputFile.files?.[0] ?? null;
+    const guid = inputGUID.value;
     if (!file && !guid) {
         alert("必须指定文件或者 GUID！");
         return;
@@ -192,28 +112,98 @@ form.addEventListener("submit", e => {
         newURL = null;
     }
 
-    decrypting = true;
+    try {
+        await decryptWorkerWrapper.startDecrypt();
+    } catch (e) {
+        alert(e);
+        return;
+    }
+
+    reset();
     if (guid) {
-        util.getM3U8FromWebPage(
-            guid,
-            Number(new FormData(form).get("resolution"))
-        ).then(link => {
-            tsBufferIterator = util.getTsFromM3U8(link);
-            filename = `${guid}.ts`;
-            sendMessage(WorkerMessageType.WANT_DECRYPT);
-        }).catch(e => {
-            sendMessage(WorkerMessageType.FINISH_DECRYPT);
-            setFailure(e);
-        });
+        let estimatedPerSliceSize: number | null = null;
+        let decryptBuffers: Uint8Array<ArrayBuffer>[] = [];
+
+        try {
+            for await (
+                const { buffer, currentSlice, totalSlice } of
+                util.getTsFromM3U8(
+                    await util.getM3U8FromGUID(
+                        guid,
+                        Number(new FormData(form).get("resolution"))
+                    ),
+                    e => setBufferStatus(`${e.currentSize} / ${e.maxSize}`)
+                )
+            ) {
+                cmdutil.log(`decrypting slice ${currentSlice}.ts...`);
+                let decBuf = await decryptWorkerWrapper.decryptTsBuffer(buffer);
+
+                if (
+                    !decryptBuffers.length ||
+                    decryptBuffers.at(-1)!.byteLength + decBuf.byteLength > MAX_TS_CHUNK_SIZE
+                ) {
+                    // either this is the first slice, or the buffer is going to overflow
+                    let size = decBuf.byteLength;
+                    if (estimatedPerSliceSize === null) // this is the first slice, set per slice size
+                        estimatedPerSliceSize = size;
+
+                    // calculate the buffer size:
+                    // we preallocate the buffer for all the remaining slices,
+                    // unless the buffer is too large, which we will limit its size then
+                    let allocSize = Math.min(
+                        estimatedPerSliceSize * (totalSlice - currentSlice),
+                        MAX_TS_CHUNK_SIZE
+                    );
+
+                    // reduce fragmentnation by filling the last buffer
+                    if (decryptBuffers.length) {
+                        const lastBuf = decryptBuffers.at(-1)!;
+                        const lastBufRemainSize = lastBuf.buffer.byteLength - lastBuf.byteLength;
+
+                        decryptBuffers[decryptBuffers.length - 1]! =
+                            util.appendUint8Array(lastBuf, decBuf.subarray(0, lastBufRemainSize), true);
+                        decBuf = decBuf.subarray(lastBufRemainSize);
+                        size -= lastBufRemainSize;
+                    }
+
+                    while (size) {
+                        let buf = util.allocUint8Array(allocSize);
+                        buf = util.appendUint8Array(buf, decBuf, true);
+                        decryptBuffers.push(buf);
+                        size -= Math.min(size, allocSize);
+                    }
+
+                } else
+                    decryptBuffers[decryptBuffers.length - 1]! =
+                        util.appendUint8Array(decryptBuffers.at(-1)!, decBuf);
+            }
+
+            setSuccess(URL.createObjectURL(new Blob(decryptBuffers)), `${guid}.ts`);
+
+        } catch (e) {
+            setFailure(e as string);
+            await decryptWorkerWrapper.endDecrypt();
+            return;
+        }
+
     } else if (file) {
         if (file.size >= MAX_TS_FILE_SIZE) {
             alert("不可解密大于 2 GiB 的视频！请使用 GUID 解密模式！");
             return;
         }
-        file.bytes().then(f => {
-            filename = `${file.name}.ts`;
-            tsBufferIterator = (async function *() { yield { buffer: f }; })();
-            sendMessage(WorkerMessageType.WANT_DECRYPT);
-        });
+
+        cmdutil.log("decrypting...");
+        try {
+            let decBuf = await decryptWorkerWrapper.decryptTsBuffer(await file.bytes());
+            setSuccess(URL.createObjectURL(new Blob([decBuf])), file.name);
+
+        } catch (e) {
+            setFailure(e as string);
+            await decryptWorkerWrapper.endDecrypt();
+            return;
+        }
+
     }
+
+    await decryptWorkerWrapper.endDecrypt();
 });

@@ -1,7 +1,7 @@
 "use strict";
 
-import * as mpegts from "../mpegts.js";
-import * as util from "../util.js";
+import * as mpegts from "#/mpegts.js";
+import * as util from "#/util.js";
 
 // generated with:
 // ffmpeg -f lavfi -i "color=size=1280x720:color=#000000" -f lavfi -i "anullsrc" -t 3 -c:v libx264 -c:a aac -f mpegts - | xxd -i

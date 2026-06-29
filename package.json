@@ -18,8 +18,11 @@
   "author": "xiaoxi-ij478",
   "main": "./build/decrypt.js",
   "types": "./build/decrypt.d.ts",
+  "imports": {
+    "#/*": "./build/*"
+  },
   "exports": {
-    ".": {
+    "./decrypt": {
       "import": "./build/decrypt.js",
       "types": "./build/decrypt.d.ts"
     },
@@ -27,21 +30,25 @@
       "import": "./build/util.js",
       "types": "./build/util.d.ts"
     },
-    "./mpegts": {
-      "import": "./build/mpegts.js",
-      "types": "./build/mpegts.d.ts"
+    "./cmdutil": {
+      "import": "./build/cmdutil.js",
+      "types": "./build/cmdutil.d.ts"
     },
-    "./nalutil": {
-      "import": "./build/nalutil.js",
-      "types": "./build/nalutil.d.ts"
+    "./worker/wrapper": {
+      "import": "./build/worker/wrapper.js",
+      "types": "./build/worker/wrapper.d.ts"
+    },
+    "./worker/worker-type": {
+      "import": "./build/worker/worker-type.js",
+      "types": "./build/worker/worker-type.d.ts"
     }
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rm -rf build && diff src/external/cctv.worker.js src/external/cctv.worker.orig.js -u | sed '1,2s/\\t.*//' >src/external/cctv.worker.diff; npx tsc && mkdir build/external && cp src/external/cctv.worker.js build/external",
-    "bundle": "rm -rf build/final && npx esbuild src/main.ts src/decrypt-worker.ts --sourcemap=linked --bundle --platform=node --format=esm --outfile=build/final/final.js && cd build/final && tar zcvf ../final.tar.gz . && zip -r ../final.zip .",
-    "bundle-web": "rm -rf build/final-web && npx esbuild src/util.ts src/cmdutil.ts src/decrypt.ts src/mpegts.ts src/nalutil.ts src/decrypt-worker*.ts src/web/* --sourcemap=linked --bundle --format=esm --outdir=build/final-web/ --external:*./util.js --external:*./cmdutil.js --external:*./decrypt.js --external:*./mpegts.js --external:*./nalutil.js --external:*./decrypt-worker*.ts",
-    "cp-web": "cp -r build/final-web/* ../cctv-h5e-decrypt-web/js/ && cp decrypter.html ../cctv-h5e-decrypt-web/index.html",
+    "bundle": "rm -rf build/final && npx esbuild src/cli/main.ts src/worker/worker.ts --sourcemap=linked --bundle --platform=node --format=esm --outdir=build/final/ && cd build/final && mv cli/* worker/* . && rmdir cli worker && tar zcvf ../final.tar.gz . && zip -r ../final.zip .",
+    "bundle-web": "rm -rf build/final-web && npx esbuild src/web/web-decrypt-script.ts src/worker/worker.ts --sourcemap=linked --bundle --format=esm --outdir=build/final-web/ --external:node:worker_threads",
+    "cp-web": "rm -rf ../cctv-h5e-decrypt-web/js && mkdir -p ../cctv-h5e-decrypt-web/js/external && cp -r build/final-web/* ../cctv-h5e-decrypt-web/js/ && cp src/external/cctv.worker.js ../cctv-h5e-decrypt-web/js/external/ && cp decrypter.html ../cctv-h5e-decrypt-web/index.html",
     "sync-latest-worker": "TMP=$(mktemp) && curl -qfsS https://player.cntv.cn/h5vod/cctv.worker.js | npx js-beautify -n >$TMP && if cmp \"$TMP\" src/external/cctv.worker.orig.js; then rm -f $TMP; else mv -f \"$TMP\" src/external/cctv.worker.orig.js && echo need to update cctv.worker.js; fi"
   },
   "dependencies": {

@@ -1,13 +1,13 @@
 "use strict";
 
-import * as util from "./util.js";
+import * as util from "#/util.js";
 
 export { NALU, splitNALU, joinNALU };
 
-const NAL_START_FIRST: Uint8Array = Uint8Array.of(0x00, 0x00, 0x00, 0x01);
-const NAL_START_SECOND: Uint8Array = Uint8Array.of(0x00, 0x00, 0x01);
+const NAL_START_FIRST: Uint8Array<ArrayBuffer> = Uint8Array.of(0x00, 0x00, 0x00, 0x01);
+const NAL_START_SECOND: Uint8Array<ArrayBuffer> = Uint8Array.of(0x00, 0x00, 0x01);
 
-function getNALUPos(buf: Uint8Array): [number, number][] {
+function getNALUPos(buf: Uint8Array<ArrayBuffer>): [number, number][] {
     let start: number, prev = 0, off = 0;
     const ret: [number, number][] = [];
 
@@ -32,26 +32,26 @@ function getNALUPos(buf: Uint8Array): [number, number][] {
     return ret;
 }
 
-function splitNALU(buf: Uint8Array): NALU[] {
+function splitNALU(buf: Uint8Array<ArrayBuffer>): NALU[] {
     return getNALUPos(buf).map(
         ([start, end]) => new NALU(buf.subarray(start, end))
     );
 }
 
-function joinNALU(nalus: NALU[]): Uint8Array {
+function joinNALU(nalus: NALU[]): Uint8Array<ArrayBuffer> {
     return util.concatUint8Arrays(nalus.map((e, i) => e.dump()));
 }
 
 class NALU {
-    start: Uint8Array;
+    start: Uint8Array<ArrayBuffer>;
     header: number;
-    payload: Uint8Array;
+    payload: Uint8Array<ArrayBuffer>;
 
     forbiddenZeroBit: number;
     nalRefIdc: number;
     nalUnitType: number;
 
-    constructor(data: Uint8Array) {
+    constructor(data: Uint8Array<ArrayBuffer>) {
         if (data.length <= 4)
             throw new Error("data length <= 4");
 
@@ -71,7 +71,7 @@ class NALU {
         this.nalUnitType = this.header & 0x1F;
     }
 
-    reloadData(newData: Uint8Array): void {
+    reloadData(newData: Uint8Array<ArrayBuffer>): void {
         if (this.header !== newData[0])
             throw new Error("header changed");
         this.header = newData[0];
@@ -82,7 +82,7 @@ class NALU {
         this.nalUnitType = this.header & 0x1F;
     }
 
-    dump(): Uint8Array {
+    dump(): Uint8Array<ArrayBuffer> {
         return Uint8Array.from([...this.start, this.header, ...this.payload]);
     }
 }

@@ -1,25 +1,28 @@
 "use strict";
 
-import * as cctvWorkerModule from "./external/cctv.worker.js";
+import * as cctvWorkerModule from "#/external/cctv.worker.js";
 
-import * as nalutil from "./nalutil.js";
-import * as mpegts from "./mpegts.js";
-import * as util from "./util.js";
-import * as cmdutil from "./cmdutil.js";
+import * as nalutil from "#/nalutil.js";
+import * as mpegts from "#/mpegts.js";
+import * as util from "#/util.js";
+import * as cmdutil from "#/cmdutil.js";
 
 export { Decrypter };
 
+// note: this is a synchronous decrypter.
+// if you call the decrypt function, your js runtime env will be blocked
+// so it is recommended to use this class in a worker
 class Decrypter {
     // each of the Decrypter instance will have its own CNTVH5PlayerModule module object
-    private CNTVH5PlayerModule: cctvWorkerModule.CNTVModuleType = cctvWorkerModule.CNTVModule();
-    private shouldDecrypt: boolean = false;
-    private vmpTag: string = "";
-    private sessionBegin: boolean = false;
+    private CNTVH5PlayerModule = cctvWorkerModule.CNTVModule();
+    private shouldDecrypt = false;
+    private vmpTag = "";
+    private sessionBegin = false;
     private loadFinished: Promise<void>;
 
-    private static readonly pageHost: string = "https://tv.cctv.com";
-    private static readonly mediaTagID: string = "player_container_player";
-    private static readonly MemoryExtend: number = 2048;
+    private static readonly pageHost = "https://tv.cctv.com";
+    private static readonly mediaTagID = "player_container_player";
+    private static readonly MemoryExtend = 2048;
 
     constructor() {
         this.loadFinished = new Promise(
@@ -76,20 +79,13 @@ class Decrypter {
         this.UnInitPlayer();
     }
 
-    // this won't modify `data`
-    decryptNALUUint8Array(data: Uint8Array): Uint8Array {
-        const nalu: nalutil.NALU = new nalutil.NALU(data);
-
-        return this.decryptNALU(nalu).dump();
-    }
-
     // warning: this function will modify `data` in-place
     decryptNALU(data: nalutil.NALU): nalutil.NALU {
         if (!this.sessionBegin)
             throw new Error("session not started yet");
 
         this.UpdatePlayer();
-        let useSpecialmediaTagID: boolean = true;
+        let useSpecialmediaTagID = true;
         switch (data.nalUnitType) {
             case 25:
                 this.shouldDecrypt = data.payload[0] === 1;
@@ -127,11 +123,11 @@ class Decrypter {
         // so we switch to use prefix and suffix
         // full format is "myPlayer_player##<dts timestamp>##<seeked ? 1 : 0>
         // (though i was unable to produce 1 on seek)
-        const localmediaTagID: string =
+        const localmediaTagID =
             useSpecialmediaTagID ? `${Decrypter.mediaTagID}##1000000##0` : Decrypter.mediaTagID;
 
-        const addr: number = this.CNTVH5PlayerModule._jsmalloc(data.payload.byteLength + 1 + Decrypter.MemoryExtend);
-        const addr2: number = this.CNTVH5PlayerModule._jsmalloc(localmediaTagID.length + 1);
+        const addr = this.CNTVH5PlayerModule._jsmalloc(data.payload.byteLength + 1 + Decrypter.MemoryExtend);
+        const addr2 = this.CNTVH5PlayerModule._jsmalloc(localmediaTagID.length + 1);
 
         this.CNTVH5PlayerModule.HEAP8[addr] = data.header;
         this.CNTVH5PlayerModule.HEAP8.set(data.payload, addr + 1);
@@ -168,7 +164,7 @@ class Decrypter {
                     Decrypter.pageHost.length
                 );
 
-        const decryptedLength: number = this.CNTVH5PlayerModule._CNTV_jsdecVOD8(
+        const decryptedLength = this.CNTVH5PlayerModule._CNTV_jsdecVOD8(
             addr2,
             addr,
             data.payload.byteLength + 1,
@@ -183,16 +179,9 @@ class Decrypter {
         return data;
     }
 
-    // this won't modify `data`
-    decryptTsBufferUint8Array(data: Uint8Array): Uint8Array {
-        const tsFile: mpegts.MPEGTS = new mpegts.MPEGTS(data);
-
-        return this.decryptTsBuffer(tsFile).dump();
-    }
-
     // warning: this function will modify `tsFile` in-place
     decryptTsBuffer(tsFile: mpegts.MPEGTS): mpegts.MPEGTS {
-        let videoStreamPID: number = -1;
+        let videoStreamPID = -1;
 /*
         // assume there's just one PMT
         for (const stream of tsFile.pmts[0].pmt.streams) {
@@ -212,12 +201,12 @@ class Decrypter {
             const [i, { pes, indexes }] of
             peses.entries()
         ) {
-            const nalus: nalutil.NALU[] = nalutil.splitNALU(pes.payload!);
+            const nalus = nalutil.splitNALU(pes.payload!);
 
             for (const nalu of nalus)
                 this.decryptNALU(nalu);
 
-            let newNALU: Uint8Array = nalutil.joinNALU(nalus);
+            let newNALU = nalutil.joinNALU(nalus);
 
             for (const index of indexes) {
                 const tsPacket: mpegts.MPEGTSPacket = tsFile.packets[index];

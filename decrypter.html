@@ -12,6 +12,7 @@
                 word-break: break-all;
             }
         </style>
+        <script type="importmap"> {"imports": {"#/": "./js/"}} </script>
         <script type="module" src="js/web/web-decrypt-script.js"> </script>
     </head>
 
@@ -66,6 +67,7 @@
             </form>
 
             <h2>日志：</h2>
+            <section>ts 缓冲切片数：<span id="tsbuffer-status"></span></section>
             <section id="logs"></section>
             <section id="success" class="nodisplay">文件解密成功。<a id="success-file-link">点击下载</a></section>
             <section id="failure" class="nodisplay">文件解密失败。原因：<span id="failure-reason"></span></section>

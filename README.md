@@ -6,8 +6,9 @@
 
 但 www.docuchina.cn 经测试，两分钟后会出现无法解码的错误。
 
-经过改造以后，这个项目应该可以嵌入到其他项目中作为一个库。
-但我还没有什么经验，因此可能需要一些调整才可以使用。
+经过一次大重写之后，这个项目现在可以在 node 和浏览器中使用。
+
+~~（而且以前我一直以为可以并行下载和解密，但发现其实不用 Worker 根本做不到）~~
 
 ## 网页版
 
@@ -20,6 +21,8 @@
 **注意！解密大于 2 GiB 的视频不能使用命令行版以及网页版的文件解密模式！**
 
 首先，安装 node 运行时环境，参见 "[Node.js — 下载 Node.js®](https://nodejs.org/zh-cn/download)"。
+
+因为现在的版本要求 Worker 是一个独立脚本，所以
 
 然后下载仓库，可选择以下几种方式执行：
 
@@ -72,23 +75,24 @@
 ```ts
 import * as process from "node:process";
 import * as fsPromises from "node:fs/promises";
+import * as path from "node:path";
 
-import * as decrypt from "cctv-h5e-decrypt";
-import * as decryptUtil from "cctv-h5e-decrypt/util";
+import * as workerWrapper from "cctv-h5e-decrypt/worker-wrapper";
+import * as workerType from "cctv-h5e-decrypt/worker/worker-type";
 
 async function main() {
-    const decrypter = new decrypt.Decrypter;
+    const decrypter = new workerWrapper.DecryptWorkerWrapper;
 
-    await decrypter.beginDecryptSession();
+    await decrypter.startDecrypt();
     for (const url of process.argv.slice(2))
-        for await (const tsBuffer of decryptUtil.getTsFromM3U8(await decryptUtil.getM3U8FromWebPage(url, 2000)))
+        for await (const { buffer } of decryptUtil.getTsFromM3U8(await decryptUtil.getM3U8FromWebPage(url, 2000)))
             await fsPromises.writeFile(
-                `${new URL(url).toString().split('/').at(-1)}.ts`,
-                decrypter.decryptTsBufferUint8Array(tsBuffer),
+                `${path.basename(url)}.ts`,
+                await decrypter.decryptTsBuffer(buffer),
                 { flag: 'a' }
             );
 
-    decrypter.endDecryptSession();
+    await decrypter.endDecrypt();
 }
 
 main();

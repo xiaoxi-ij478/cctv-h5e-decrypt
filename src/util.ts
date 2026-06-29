@@ -1,6 +1,6 @@
 "use strict";
 
-import * as cmdutil from "./cmdutil.js";
+import * as cmdutil from "#/cmdutil.js";
 
 export {
     arrayEquals,
@@ -17,10 +17,11 @@ export {
     getTsFromM3U8,
     TsBufferIterator,
     TsBufferCountIterator,
+    QueueStatus,
     Queue
 };
 
-function arrayEquals(a: Uint8Array, b: Uint8Array): boolean {
+function arrayEquals(a: Uint8Array<ArrayBuffer>, b: Uint8Array<ArrayBuffer>): boolean {
     return (
         a.length === b.length &&
         a.every((el, idx) => el === b.at(idx))
@@ -59,7 +60,11 @@ function checkNumberNotEqual(
 // arr: arrays to concat
 // toBuffer: if provided, the existing arraybuffer to append
 //    but if the provided buffer is too small, we'll allocate a new buffer
-function concatUint8Arrays(arr: Uint8Array[], toBuffer?: ArrayBuffer, noRealloc = false): Uint8Array {
+function concatUint8Arrays(
+    arr: Uint8Array<ArrayBuffer>[],
+    toBuffer?: ArrayBuffer,
+    noRealloc = false
+): Uint8Array<ArrayBuffer> {
     const totalLength = arr.reduce((a, e) => a + e.byteLength, 0);
     let reallocated = false;
 
@@ -71,7 +76,7 @@ function concatUint8Arrays(arr: Uint8Array[], toBuffer?: ArrayBuffer, noRealloc 
         toBuffer = new ArrayBuffer(totalLength);
     }
 
-    const newArr: Uint8Array = new Uint8Array(
+    const newArr: Uint8Array<ArrayBuffer> = new Uint8Array(
         toBuffer ?? new ArrayBuffer(totalLength),
         0,
         totalLength
@@ -88,15 +93,19 @@ function concatUint8Arrays(arr: Uint8Array[], toBuffer?: ArrayBuffer, noRealloc 
 // append to dst's underlying arraybuffer
 // this may cause a reallocation if dst's arraybuffer is not large enough,
 // so we return the array in case it reallocates
-function appendUint8Array(dst: Uint8Array, src: Uint8Array, noRealloc = false): Uint8Array {
+function appendUint8Array(
+    dst: Uint8Array<ArrayBuffer>,
+    src: Uint8Array<ArrayBuffer>,
+    noRealloc = false
+): Uint8Array<ArrayBuffer> {
     return concatUint8Arrays([dst, src], dst.buffer, noRealloc);
 }
 
-function allocUint8Array(size: number): Uint8Array {
-    return new Uint8Array(new ArrayBuffer(allocSize), 0, 0);
+function allocUint8Array(size: number): Uint8Array<ArrayBuffer> {
+    return new Uint8Array(new ArrayBuffer(size), 0, 0);
 }
 
-async function getURLAsUint8Array(url: string | URL, fetchOptions?: RequestInit): Promise<Uint8Array> {
+async function getURLAsUint8Array(url: string | URL, fetchOptions?: RequestInit): Promise<Uint8Array<ArrayBuffer>> {
     const response = await fetch(url, fetchOptions);
     if (!response.ok)
         throw new Error(`URL returned error: ${response.status} ${response.statusText}`);
@@ -130,7 +139,7 @@ async function getM3U8FromWebPage(url: string, resolution: number, fetchOptions?
         if (!line.match(/var\s+(?:video_)?guid\s*=/))
             continue;
 
-        guid = line.replace(/.*(["'])(.*)\1.*/, "$2");
+        guid = line.replace(/.*(["'])(.*)\1.*/, "$2").trim();
         break;
     }
 
@@ -169,6 +178,10 @@ class Queue<T> {
         this.maxSize = maxSize;
     }
 
+    get currentSize(): number {
+        return this.arr.length;
+    }
+
     async get(): Promise<T> {
         if (!this.arr.length)
             await new Promise(
@@ -191,7 +204,7 @@ class Queue<T> {
 }
 
 interface TsBufferIterator {
-    buffer: Uint8Array;
+    buffer: Uint8Array<ArrayBuffer>;
 };
 
 interface TsBufferCountIterator extends TsBufferIterator {
@@ -199,17 +212,37 @@ interface TsBufferCountIterator extends TsBufferIterator {
     totalSlice: number;
 };
 
-async function *getTsFromM3U8(url: string, fetchOptions?: RequestInit): AsyncGenerator<TsBufferCountIterator> {
-    async function backgroundFetcher(urls: URL[], queue: Queue<Uint8Array>): Promise<void> {
-        for (const i of urls)
-            await queue.put(await getURLAsUint8Array(i));
+interface QueueStatus {
+    currentSize: number;
+    maxSize: number;
+}
+
+async function *getTsFromM3U8(
+    url: string,
+    queueCallback?: (e: QueueStatus) => void,
+    fetchOptions?: RequestInit
+): AsyncGenerator<TsBufferCountIterator> {
+    async function backgroundFetcher(urls: URL[], queue: Queue<Uint8Array<ArrayBuffer>>): Promise<void> {
+        for (const i in urls) {
+            cmdutil.log(`downloading slice ${i}.ts...`);
+            await queue.put(await getURLAsUint8Array(urls[i]));
+            queueCallback?.({ currentSize: queue.currentSize, maxSize: queue.maxSize });
+        }
     }
 
     const m3u8Content = await getURLAsText(url, fetchOptions);
-    const queue = new Queue<Uint8Array>;
-    const urls = m3u8Content.split(/\n/).filter(l => l && !l.match(/^#/)).map(e => new URL(e, url));
+    const queue = new Queue<Uint8Array<ArrayBuffer>>;
+    const urls =
+        m3u8Content
+        .split(/\n/)
+        .filter(l => l && !l.startsWith("#"))
+        .map(e => new URL(e, url));
     backgroundFetcher(urls, queue);
 
     for (let i = 0; i < urls.length; i++)
-        yield [await queue.get(), i, urls.length];
+        yield {
+            buffer: await queue.get(),
+            currentSlice: i,
+            totalSlice: urls.length
+        };
 }

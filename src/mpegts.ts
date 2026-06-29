@@ -3,8 +3,8 @@
 import * as jsCrc from "js-crc";
 import * as jsCrcModels from "js-crc/models";
 
-import * as util from "./util.js";
-import * as cmdutil from "./cmdutil.js";
+import * as util from "#/util.js";
+import * as cmdutil from "#/cmdutil.js";
 
 export {
     MPEGTSPacketBase,
@@ -27,11 +27,11 @@ const disableIntegrityCheck: boolean = false;
 // TS layer packet
 // these classes receive a bytearray as constructor argument
 abstract class MPEGTSPacketBase {
-    protected abstract init(data: Uint8Array): void;
+    protected abstract init(data: Uint8Array<ArrayBuffer>): void;
     abstract reset(): void;
-    abstract dump(): Uint8Array;
+    abstract dump(): Uint8Array<ArrayBuffer>;
 
-    reinit(data: Uint8Array): void {
+    reinit(data: Uint8Array<ArrayBuffer>): void {
         this.reset();
         this.init(data);
     }
@@ -46,9 +46,9 @@ class MPEGTSPacketHeader extends MPEGTSPacketBase {
     pid = 0;
 
     constructor();
-    constructor(data: Uint8Array);
+    constructor(data: Uint8Array<ArrayBuffer>);
 
-    constructor(data?: Uint8Array) {
+    constructor(data?: Uint8Array<ArrayBuffer>) {
         super();
 
         if (typeof data === "undefined")
@@ -57,7 +57,7 @@ class MPEGTSPacketHeader extends MPEGTSPacketBase {
         this.init(data);
     }
 
-    protected init(data: Uint8Array): void {
+    protected init(data: Uint8Array<ArrayBuffer>): void {
         util.checkNumberEqual(data[0], 0x47, "sync byte error", !disableIntegrityCheck);
         util.checkNumberNotEqual(data[1] >> 7, 1, "error indicator set", !disableIntegrityCheck);
 
@@ -78,7 +78,7 @@ class MPEGTSPacketHeader extends MPEGTSPacketBase {
         this.continuityCount = this.transportPriority = this.pid = 0;
     }
 
-    dump(): Uint8Array {
+    dump(): Uint8Array<ArrayBuffer> {
         return Uint8Array.of(
             0x47,
             Number(!this.isContinuePacket) << 6 | this.transportPriority << 5 | this.pid >> 8,
@@ -90,12 +90,12 @@ class MPEGTSPacketHeader extends MPEGTSPacketBase {
 
 class MPEGTSPacketAdaptationField extends MPEGTSPacketBase {
     payloadLength = 0;
-    payload: Uint8Array | null = null;
+    payload: Uint8Array<ArrayBuffer> | null = null;
 
     constructor();
-    constructor(data: Uint8Array);
+    constructor(data: Uint8Array<ArrayBuffer>);
 
-    constructor(data?: Uint8Array) {
+    constructor(data?: Uint8Array<ArrayBuffer>) {
         super();
 
         if (typeof data === "undefined")
@@ -104,7 +104,7 @@ class MPEGTSPacketAdaptationField extends MPEGTSPacketBase {
         this.init(data);
     }
 
-    protected init(data: Uint8Array): void {
+    protected init(data: Uint8Array<ArrayBuffer>): void {
         this.payloadLength = data[0];
         this.payload = data.subarray(1, this.payloadLength + 1);
     }
@@ -114,7 +114,7 @@ class MPEGTSPacketAdaptationField extends MPEGTSPacketBase {
         this.payload = null;
     }
 
-    dump(): Uint8Array {
+    dump(): Uint8Array<ArrayBuffer> {
         return Uint8Array.of(
             this.payloadLength,
             ...(this.payload ?? [])
@@ -125,12 +125,12 @@ class MPEGTSPacketAdaptationField extends MPEGTSPacketBase {
 class MPEGTSPacket extends MPEGTSPacketBase {
     header = new MPEGTSPacketHeader;
     adaptationField: MPEGTSPacketAdaptationField | null = null;
-    payload: Uint8Array | null = null;
+    payload: Uint8Array<ArrayBuffer> | null = null;
 
     constructor();
-    constructor(data: Uint8Array);
+    constructor(data: Uint8Array<ArrayBuffer>);
 
-    constructor(data?: Uint8Array) {
+    constructor(data?: Uint8Array<ArrayBuffer>) {
         super();
 
         if (typeof data === "undefined")
@@ -139,7 +139,7 @@ class MPEGTSPacket extends MPEGTSPacketBase {
         this.init(data);
     }
 
-    protected init(data: Uint8Array): void {
+    protected init(data: Uint8Array<ArrayBuffer>): void {
         if (!disableIntegrityCheck && data.length !== 188) {
             cmdutil.warn("this MPEG TS Packet has trailing garbage, will discard them");
             data = data.subarray(0, 188);
@@ -163,7 +163,7 @@ class MPEGTSPacket extends MPEGTSPacketBase {
         this.payload = null;
     }
 
-    dump(): Uint8Array {
+    dump(): Uint8Array<ArrayBuffer> {
         return Uint8Array.of(
             ...this.header.dump(),
             ...(this.adaptationField?.dump() ?? []),
@@ -189,7 +189,7 @@ abstract class MPEGTSPESPacketBase {
     protected abstract realInit(): void;
     protected abstract realReset(): void;
     protected abstract realUpdate(): boolean; // returns true when completed
-    protected abstract realDump(): Uint8Array;
+    protected abstract realDump(): Uint8Array<ArrayBuffer>;
 
     protected init(data: MPEGTSPacket): void {
         if (!disableIntegrityCheck && data.header.isContinuePacket)
@@ -264,7 +264,7 @@ abstract class MPEGTSPESPacketBase {
         return this.complete;
     }
 
-    dump(): Uint8Array {
+    dump(): Uint8Array<ArrayBuffer> {
         if (!this.complete)
             throw new Error("can't dump incomplete packet");
 
@@ -274,7 +274,7 @@ abstract class MPEGTSPESPacketBase {
 
 // PSI requires to remove the first byte and the length it indicates
 abstract class MPEGTSPSIPacketBase extends MPEGTSPESPacketBase {
-    protected additionalData: Uint8Array | null = null;
+    protected additionalData: Uint8Array<ArrayBuffer> | null = null;
 
     protected init(data: MPEGTSPacket): void {
         if (!disableIntegrityCheck && data.header.isContinuePacket)
@@ -298,7 +298,7 @@ abstract class MPEGTSPSIPacketBase extends MPEGTSPESPacketBase {
             this.complete = true;
     }
 
-    dump(): Uint8Array {
+    dump(): Uint8Array<ArrayBuffer> {
         return Uint8Array.of(
             this.additionalData?.byteLength ?? 0,
             ...(this.additionalData ?? []),
@@ -397,7 +397,7 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
         return true;
     }
 
-    protected realDump(): Uint8Array {
+    protected realDump(): Uint8Array<ArrayBuffer> {
         const sectionLength: number = (
             5 + // header following section length
             4 + // crc
@@ -407,7 +407,7 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
             throw new Error("section length greater than 1021");
 
         const crc32obj: jsCrc.Crc = jsCrcModels.default.crc_32_mpeg_2.create();
-        let dataToCRC: Uint8Array = Uint8Array.of(
+        let dataToCRC = Uint8Array.of(
             0x00,
             0xB0 | sectionLength >> 8,
             sectionLength & 0xFF,
@@ -435,7 +435,7 @@ class MPEGTSPAT extends MPEGTSPSIPacketBase {
 type MPEGTSPMTStreamInfo = {
     streamType: number;
     pid: number;
-    descriptor: Uint8Array;
+    descriptor: Uint8Array<ArrayBuffer>;
 };
 
 class MPEGTSPMT extends MPEGTSPSIPacketBase {
@@ -542,7 +542,7 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
         return true;
     }
 
-    protected realDump(): Uint8Array {
+    protected realDump(): Uint8Array<ArrayBuffer> {
         const sectionLength: number = (
             9 + // header following section length
             4 + // crc
@@ -553,7 +553,7 @@ class MPEGTSPMT extends MPEGTSPSIPacketBase {
             throw new Error("section length greater than 1021");
 
         const crc32obj: jsCrc.Crc = jsCrcModels.default.crc_32_mpeg_2.create();
-        let dataToCRC: Uint8Array = Uint8Array.of(
+        let dataToCRC = Uint8Array.of(
             0x02,
             0xB0 | sectionLength >> 8,
             sectionLength & 0xFF,
@@ -723,7 +723,7 @@ class MPEGTSPES extends MPEGTSPESPacketBase {
         return !this.remainingLength;
      }
 
-    protected realDump(): Uint8Array {
+    protected realDump(): Uint8Array<ArrayBuffer> {
         return Uint8Array.of(
             ...this.header,
             ...this.payload
@@ -749,9 +749,9 @@ class MPEGTS {
     packets: MPEGTSPacket[] = [];
 
     constructor();
-    constructor(data: Uint8Array);
+    constructor(data: Uint8Array<ArrayBuffer>);
 
-    constructor(data?: Uint8Array) {
+    constructor(data?: Uint8Array<ArrayBuffer>) {
         if (typeof data === "undefined")
             return;
 
@@ -764,7 +764,7 @@ class MPEGTS {
         this.packets = [];
     }
 
-    update(data: Uint8Array): void {
+    update(data: Uint8Array<ArrayBuffer>): void {
         while (data.byteLength) {
             this.packets.push(new MPEGTSPacket(data.subarray(0, 188)));
             data = data.subarray(188);
@@ -869,7 +869,7 @@ class MPEGTS {
         return ret;
     }
 
-    dump(): Uint8Array {
+    dump(): Uint8Array<ArrayBuffer> {
         return util.concatUint8Arrays(this.packets.map((e, i) => e.dump()));
     }
 }
