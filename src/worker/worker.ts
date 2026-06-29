@@ -1,9 +1,9 @@
 "use strict";
 
-import * as decrypter from "#/decrypter.js";
-import * as mpegts from "#/mpegts.js";
-import * as nalutil from "#/nalutil.js";
-import * as workerType from "#/worker/worker-type.js";
+import * as decrypter from "../decrypter.js";
+import * as mpegts from "../mpegts.js";
+import * as nalutil from "../nalutil.js";
+import * as workerType from "../worker/worker-type.js";
 
 enum DecryptStatus {
     NOT_DECRYPTING,
@@ -14,15 +14,24 @@ enum DecryptStatus {
 let decryptStatus = DecryptStatus.NOT_DECRYPTING;
 let decrypterObject: decrypter.Decrypter | null = null;
 
+let workerThreads: typeof import("node:worker_threads");
+if (workerType.isNode) {
+    // node.js
+    workerThreads = await import("node:worker_threads");
+    workerThreads.parentPort?.on("message", onMessageReceived);
+} else
+    // browser
+    (self as any).addEventListener("message", onMessageReceived);
+
 function sendMessage(
     type: workerType.WorkerMessageType,
     payload?: workerType.WorkerMessagePayload,
     transferArr: ArrayBuffer[] = []
 ): void {
     if (workerType.isNode)
-        (workerType.WorkerNamespace as typeof import("node:worker_threads")).parentPort?.postMessage({ type, payload }, transferArr);
+        workerThreads.parentPort?.postMessage({ type, payload }, transferArr);
     else
-        (workerType.WorkerNamespace as any).postMessage({ type, payload }, transferArr);
+        (self as any).postMessage({ type, payload }, transferArr);
 }
 
 function onMessageReceived(e: any): void {
@@ -109,10 +118,3 @@ function onMessageReceived(e: any): void {
             break;
     }
 }
-
-if (workerType.isNode)
-    // node.js
-    (workerType.WorkerNamespace as typeof import("node:worker_threads")).parentPort?.on("message", onMessageReceived);
-else 
-    // browser
-    (workerType.WorkerNamespace as any).addEventListener("message", onMessageReceived);

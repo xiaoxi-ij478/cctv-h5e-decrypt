@@ -1,16 +1,14 @@
-import * as util from "#/util.js";
+import * as util from "../util.js";
 
 export {
     WorkerMessageType,
     WorkerMessagePayload,
     WorkerMessage,
-    isNode,
-    WorkerNamespace
+    isNode
 };
 
 // polyfills for node and browser
 const isNode = typeof process === "object" && typeof process.versions === "object" && typeof process.versions.node === "string";
-const WorkerNamespace = isNode ? await import("node:worker_threads") : globalThis;
 
 enum WorkerMessageType {
     WANT_DECRYPT, // to worker

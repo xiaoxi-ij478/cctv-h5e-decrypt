@@ -1,6 +1,6 @@
 "use strict";
 
-import * as util from "#/util.js";
+import * as util from "./util.js";
 
 export { NALU, splitNALU, joinNALU };
 

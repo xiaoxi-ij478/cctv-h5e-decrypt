@@ -1,6 +1,6 @@
 "use strict";
 
-import * as cmdutil from "#/cmdutil.js";
+import * as cmdutil from "./cmdutil.js";
 
 export {
     arrayEquals,

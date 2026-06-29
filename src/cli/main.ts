@@ -3,13 +3,13 @@
 import * as fsPromises from "node:fs/promises";
 import * as fs from "node:fs";
 import * as readline from "node:readline/promises";
-import * as os from "node:os";
 import * as path from "node:path";
+import * as os from "node:os";
 
-import * as util from "#/util.js";
-import * as cmdutil from "#/cmdutil.js";
-import * as workerType from "#/worker/worker-type.js";
-import * as workerWrapper from "#/worker/wrapper.js";
+import * as util from "../util.js";
+import * as cmdutil from "../cmdutil.js";
+import * as workerType from "../worker/worker-type.js";
+import * as workerWrapper from "../worker/wrapper.js";
 
 async function *getTsFromM3U8File(
     filename: string,
@@ -67,46 +67,7 @@ async function main(): Promise<void> {
     let guidResolution = -1;
     let cacheSlice = 10;
 
-    let workerFilename: string | null = null;
-    let baseDir = path.dirname(process.argv[1]);
-    let joiner = (e: string) => path.join(baseDir, e);
-    let decryptWorkerWrapper: workerWrapper.DecryptWorkerWrapper;
-    const tmpdir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "node-"));
-
-    process.on("exit", () => {
-        fs.rmSync(tmpdir, { force: true, recursive: true });
-    });
-
-    for (const i of [
-        "../worker/worker.ts", // running from repo
-        "../worker/worker.js", // running from build
-        "./worker.js"          // bundled
-    ]) {
-        try {
-            await fsPromises.access(joiner(i));
-        } catch (e) {
-            continue;
-        }
-        
-        workerFilename = i;
-        break;
-    }
-    
-    if (workerFilename === null)
-        throw new Error("Worker file not found; check you've downloaded all required files correctly.");
-
-    if (workerFilename.endsWith(".ts"))
-        await (await import("esbuild")).build({
-            entryPoints: [joiner("../worker/worker.ts")],
-            bundle: true,
-            format: "esm",
-            platform: "node",
-            outfile: path.join(tmpdir, "worker.js"),
-            logLevel: "silent"
-        });
-
-    decryptWorkerWrapper = new workerWrapper.DecryptWorkerWrapper(
-        workerFilename.endsWith(".ts") ? path.join(tmpdir, "worker.js") : joiner(workerFilename),
+    let decryptWorkerWrapper = new workerWrapper.DecryptWorkerWrapper(
         e => {
             cmdutil.error("Worker 出现错误");
             cmdutil.error(e);

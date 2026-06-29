@@ -6,7 +6,7 @@
 
 但 www.docuchina.cn 经测试，两分钟后会出现无法解码的错误。
 
-经过一次大重写之后，这个项目现在可以在 node 和浏览器中使用。
+这个项目已在 node 和 firefox 中测试，可以使用。其余平台（如 bun 等）未做测试。
 
 ~~（而且以前我一直以为可以并行下载和解密，但发现其实不用 Worker 根本做不到）~~
 
@@ -77,6 +77,7 @@ import * as fsPromises from "node:fs/promises";
 import * as path from "node:path";
 
 import * as workerWrapper from "cctv-h5e-decrypt/worker/wrapper";
+import * as decryptUtil from "cctv-h5e-decrypt/util";
 
 async function main() {
     const decrypter = new workerWrapper.DecryptWorkerWrapper;
@@ -118,6 +119,10 @@ main();
 @WeaponJang 开发了一个使用这个项目的网页解密器，参见 https://github.com/WeaponJang/cctv-video-guid
 
 [videodl](https://github.com/CharlesPikachu/videodl) 是一个多功能视频下载器，集成了这个项目（其实是早期单脚本的版本）。
+
+### 参考
+
+[如何用 tsx 运行 Worker threads](https://gist.github.com/pcan/b5125c95529705169d37bbf353ce53a1)
 
 ### 压力测试
 

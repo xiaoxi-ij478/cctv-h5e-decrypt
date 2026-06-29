@@ -1,9 +1,9 @@
 "use strict";
 
-import * as util from "#/util.js";
-import * as cmdutil from "#/cmdutil.js";
-import * as workerWrapper from "#/worker/wrapper.js";
-import * as workerType from "#/worker/worker-type.js";
+import * as util from "../util.js";
+import * as cmdutil from "../cmdutil.js";
+import * as workerWrapper from "../worker/wrapper.js";
+import * as workerType from "../worker/worker-type.js";
 
 // 1 GiB per ts chunk (anything larger will cause firefox to choke on download)
 const MAX_TS_CHUNK_SIZE = 1073741824;
@@ -22,10 +22,9 @@ const success = document.getElementById("success") as HTMLElement;
 const failureReason = document.getElementById("failure-reason") as HTMLElement;
 const successFileLink = document.getElementById("success-file-link") as HTMLAnchorElement;
 const decryptWorkerWrapper = new workerWrapper.DecryptWorkerWrapper(
-    "js/worker/worker.js",
     e => {
-        alert("Worker 出现错误");
         console.error(e);
+        alert("Worker 出现错误");
         canDecrypt = false;
     }
 );

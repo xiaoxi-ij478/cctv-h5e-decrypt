@@ -1,11 +1,11 @@
 "use strict";
 
-import * as cctvWorkerModule from "#/external/cctv.worker.js";
+import * as cctvWorkerModule from "./external/cctv.worker.js";
 
-import * as nalutil from "#/nalutil.js";
-import * as mpegts from "#/mpegts.js";
-import * as util from "#/util.js";
-import * as cmdutil from "#/cmdutil.js";
+import * as nalutil from "./nalutil.js";
+import * as mpegts from "./mpegts.js";
+import * as util from "./util.js";
+import * as cmdutil from "./cmdutil.js";
 
 export { Decrypter };
 

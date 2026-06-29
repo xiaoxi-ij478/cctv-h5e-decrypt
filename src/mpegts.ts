@@ -3,8 +3,8 @@
 import * as jsCrc from "js-crc";
 import * as jsCrcModels from "js-crc/models";
 
-import * as util from "#/util.js";
-import * as cmdutil from "#/cmdutil.js";
+import * as util from "./util.js";
+import * as cmdutil from "./cmdutil.js";
 
 export {
     MPEGTSPacketBase,
