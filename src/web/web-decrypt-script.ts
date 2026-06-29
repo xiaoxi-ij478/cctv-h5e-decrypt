@@ -13,6 +13,7 @@ let newURL: string | null = null;
 let canDecrypt = true;
 const inputFile = document.getElementById("input-file") as HTMLInputElement;
 const inputGUID = document.getElementById("input-guid") as HTMLInputElement;
+const maxBufferSlice = document.getElementById("max-buffer-slices") as HTMLInputElement;
 const form = document.getElementById("form") as HTMLFormElement;
 const logs = document.getElementById("logs") as HTMLElement;
 const tsBufferStatus = document.getElementById("tsbuffer-status") as HTMLElement;
@@ -132,7 +133,11 @@ form.addEventListener("submit", async e => {
                         guid,
                         Number(new FormData(form).get("resolution"))
                     ),
-                    e => setBufferStatus(`${e.currentSize} / ${e.maxSize}`)
+                    e => {
+                        setBufferStatus(`${e.currentSize} / ${e.maxSize}`);
+                        cmdutil.log(`downloading slice ${e.currentSlice}.ts...`);
+                    },
+                    Number(maxBufferSlice.value) ?? 10
                 )
             ) {
                 cmdutil.log(`decrypting slice ${currentSlice}.ts...`);

@@ -20,50 +20,42 @@
         <h1> CCTV h5e 解密器 </h1>
 
         <article>
-            <section><em>网页端无法解密大于 2 GiB 的文件！</em></section>
+            <p><em>网页端无法解密大于 2 GiB 的文件！</em></p>
+            <p><em>因为技术原因（CORS 跨站请求限制），此网页端不能直接提供链接下载，需要手动获取 GUID。<a href="https://www.52pojie.cn/thread-2052017-1-1.html">获取方法</a></em></p>
             <form id="form">
-                <section>
-                    <label for="input-file">选择一个要解密的文件：</label>
+                <fieldset>
+                    <legend>选择要解密的文件或 GUID：</legend>
+
+                    <label for="input-file">文件：</label>
                     <input type="file" name="input-file" id="input-file" />
-                </section>
-                <hr />
-
-                <section>
-                    <p><em>因为技术原因（CORS 跨站请求限制），此网页端不能直接提供链接下载，需要手动获取 GUID。<a href="https://www.52pojie.cn/thread-2052017-1-1.html">获取方法</a></em></p>
-                    <label for="input-guid">或输入要解密的视频的 GUID（形如 8bc62195181146d1894bf7ca5ac4d3f5）：</label>
-                    <input type="text" name="input-guid" id="input-guid" />
-                </section>
-                <section>
-                    <div><label>以及清晰度：</label></div>
-
-                    <div>
-                        <label for="resolution450">450</label>
-                        <input type="radio" id="resolution450" name="resolution" value="450" />
-                    </div>
-                    <div>
-                        <label for="resolution850">850</label>
-                        <input type="radio" id="resolution850" name="resolution" value="850" />
-                    </div>
-                    <div>
-                        <label for="resolution1200">1200</label>
-                        <input type="radio" id="resolution1200" name="resolution" value="1200" />
-                    </div>
-                    <div>
-                        <label for="resolution2000">2000</label>
-                        <input type="radio" id="resolution2000" name="resolution" value="2000" checked />
-                    </div>
-                    <div>
-                        <label for="resolution4000">4000</label>
-                        <input type="radio" id="resolution4000" name="resolution" value="4000" />
-                    </div>
-                </section>
-                <section>
+                    <br />
+                    <label for="input-guid">或 GUID：</label>
+                    <input type="text" name="input-guid" id="input-guid" maxlength="32" size="32"/>
+                    <br />
                     <label>（如果同时指定了两者，那么将使用 GUID）</label>
-                </section>
-                <hr />
-                <section>
-                    <button id="start-decrypt">开始解密</button>
-                </section>
+                </fieldset>
+                <fieldset>
+                    <legend>清晰度（仅 GUID）：</legend>
+
+                        <input type="radio" id="resolution450" name="resolution" value="450" />
+                        <label for="resolution450">450</label>
+                        <input type="radio" id="resolution850" name="resolution" value="850" />
+                        <label for="resolution850">850</label>
+                        <input type="radio" id="resolution1200" name="resolution" value="1200" />
+                        <label for="resolution1200">1200</label>
+                        <input type="radio" id="resolution2000" name="resolution" value="2000" checked />
+                        <label for="resolution2000">2000</label>
+                        <input type="radio" id="resolution4000" name="resolution" value="4000" />
+                        <label for="resolution4000">4000</label>
+                </fieldset>
+                <fieldset>
+                    <legend>配置</legend>
+
+                    <label for="max-buffer-slices">最大缓冲切片数</label>
+                    <input type="number" min="1" max="100" value="10" id="max-buffer-slices" name="max-buffer-slices" />
+                </fieldset>
+                <br />
+                <button id="start-decrypt">开始解密</button>
             </form>
 
             <h2>日志：</h2>

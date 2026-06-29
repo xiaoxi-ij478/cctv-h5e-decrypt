@@ -164,8 +164,7 @@ async function getM3U8FromGUID(guid: string, resolution: number, fetchOptions?: 
 
     const ret = videoInfo.manifest.hls_h5e_url.replace(/main/g, resolution.toString()).replace(/\?.*/, "");
     cmdutil.log(`got link "${ret}"`);
-    // return ret;
-    return `https://dh5wswx02.v.cntv.cn/asp/h5e/hls/${resolution}/0303000a/3/default/${guid}/${resolution}.m3u8`;
+    return ret;
 }
 
 class Queue<T> {
@@ -213,6 +212,7 @@ interface TsBufferCountIterator extends TsBufferIterator {
 };
 
 interface QueueStatus {
+    currentSlice: number;
     currentSize: number;
     maxSize: number;
 }
@@ -220,18 +220,22 @@ interface QueueStatus {
 async function *getTsFromM3U8(
     url: string,
     queueCallback?: (e: QueueStatus) => void,
+    maxCache: number = 10,
     fetchOptions?: RequestInit
 ): AsyncGenerator<TsBufferCountIterator> {
     async function backgroundFetcher(urls: URL[], queue: Queue<Uint8Array<ArrayBuffer>>): Promise<void> {
         for (const i in urls) {
-            cmdutil.log(`downloading slice ${i}.ts...`);
+            queueCallback?.({
+                currentSlice: Number(i),
+                currentSize: queue.currentSize,
+                maxSize: queue.maxSize
+            });
             await queue.put(await getURLAsUint8Array(urls[i]));
-            queueCallback?.({ currentSize: queue.currentSize, maxSize: queue.maxSize });
         }
     }
 
     const m3u8Content = await getURLAsText(url, fetchOptions);
-    const queue = new Queue<Uint8Array<ArrayBuffer>>;
+    const queue = new Queue<Uint8Array<ArrayBuffer>>(maxCache);
     const urls =
         m3u8Content
         .split(/\n/)
@@ -239,10 +243,10 @@ async function *getTsFromM3U8(
         .map(e => new URL(e, url));
     backgroundFetcher(urls, queue);
 
-    for (let i = 0; i < urls.length; i++)
+    for (const i in urls)
         yield {
             buffer: await queue.get(),
-            currentSlice: i,
+            currentSlice: Number(i),
             totalSlice: urls.length
         };
 }
