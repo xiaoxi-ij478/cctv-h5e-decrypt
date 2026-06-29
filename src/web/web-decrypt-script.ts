@@ -161,7 +161,7 @@ form.addEventListener("submit", async e => {
                     Number(maxBufferSlice.value) ?? 10
                 )
             ) {
-                setDecryptStatus(currentSlice, totalSlice - 1);
+                setDecryptStatus(currentSlice + 1, totalSlice);
                 cmdutil.log(`decrypting slice ${currentSlice}.ts...`);
 
                 let decBuf = await decryptWorkerWrapper.decryptTsBuffer(buffer);
