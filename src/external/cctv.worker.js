@@ -5,7 +5,7 @@ var CNTVModule = function() {
         var _scriptDir = "undefined" != typeof document && document.currentScript ? document.currentScript.src : void 0;
 
         // a very simple xhr implementation to fit the need of __emscripten_fetch_xhr()
-        const privateXMLHttpRequest = class {
+        class privateXMLHttpRequest {
             #url;
             #method;
             #resolveFunc;
