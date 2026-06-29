@@ -175,7 +175,7 @@ async function main(): Promise<void> {
                 process.argv[2],
                 e => {
                     if (e.currentSlice !== null)
-                    cmdutil.log(`downloading slice ${e.currentSlice}.ts...`)
+                        cmdutil.log(`downloading slice ${e.currentSlice}.ts...`)
                 },
                 cacheSlice
             )
@@ -198,7 +198,7 @@ async function main(): Promise<void> {
                 await util.getM3U8FromWebPage(process.argv[2], guidResolution),
                 e => {
                     if (e.currentSlice !== null)
-                    cmdutil.log(`downloading slice ${e.currentSlice}.ts...`)
+                        cmdutil.log(`downloading slice ${e.currentSlice}.ts...`)
                 },
                 cacheSlice
             )
@@ -221,7 +221,7 @@ async function main(): Promise<void> {
                 process.argv[2],
                 e => {
                     if (e.currentSlice !== null)
-                    cmdutil.log(`downloading slice ${e.currentSlice}.ts...`)
+                        cmdutil.log(`downloading slice ${e.currentSlice}.ts...`)
                 },
                 cacheSlice
             )
