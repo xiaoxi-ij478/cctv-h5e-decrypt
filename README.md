@@ -2,6 +2,10 @@
 
 ## 项目说明
 
+**因为现在已有一个[原生 C++ 版](https://github.com/letr007/CCTVVideoDownloader)的解密方法，加之~~我比较懒~~，所以这个项目暂时停摆。**
+
+**如果你喜欢可以自己 fork 后学习研究。**
+
 本项目用于解密使用 CCTV h5e 法加密的视频。
 
 但 www.docuchina.cn 经测试，两分钟后会出现无法解码的错误。
